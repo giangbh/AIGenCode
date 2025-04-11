@@ -253,16 +253,28 @@
                     <span class="text-purple-800 font-medium">Đang xem: Thành viên</span>
                 </div>
                 <section id="members-section" class="bg-white p-6 rounded-lg shadow-md mb-8">
-                    <h2 class="text-2xl font-semibold mb-4 text-purple-600 flex items-center">
-                        <i data-lucide="users" class="w-6 h-6 mr-2"></i>
-                        Quản lý Thành viên
+                    <h2 class="text-2xl font-semibold mb-4 text-purple-600 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <i data-lucide="users" class="w-6 h-6 mr-2"></i>
+                            Quản lý Thành viên
+                        </div>
+                        <button id="add-member-btn" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm flex items-center">
+                            <i data-lucide="plus" class="w-4 h-4 mr-1"></i>
+                            Thêm thành viên
+                        </button>
                     </h2>
                     
                     <div class="mb-6">
-                        <h3 class="text-lg font-semibold mb-3 text-gray-700">Danh sách thành viên</h3>
+                        <p class="text-sm text-gray-600 mb-4">Quản lý danh sách thành viên và thông tin tài khoản của họ. Bạn có thể thêm thành viên mới, chỉnh sửa thông tin tài khoản hoặc xóa thành viên khỏi nhóm.</p>
+                        
+                        <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                            <i data-lucide="users" class="w-5 h-5 mr-2 text-purple-500"></i>
+                            Danh sách thành viên
+                        </h3>
                         <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
                             <div id="members-list" class="space-y-3">
                                 <!-- Member list will be populated here -->
+                                <p id="no-members-message" class="text-gray-500 italic text-center py-4">Chưa có thành viên nào. Hãy thêm thành viên để bắt đầu.</p>
                             </div>
                         </div>
                     </div>

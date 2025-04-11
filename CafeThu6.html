@@ -1,0 +1,1728 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CafeThu6 - Chia tiền nhóm</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #f0fdf4; /* Light pastel green background */
+        }
+        /* Custom iOS-like toggle switch styles */
+        .toggle-checkbox:checked { @apply bg-green-500; right: 0; border-color: #22c55e; }
+        .toggle-checkbox:checked + .toggle-label { @apply bg-green-500; }
+        .toggle-checkbox:checked + .toggle-label .toggle-ball { @apply translate-x-full; }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        /* Ensure icons align vertically */
+        svg[data-lucide] { vertical-align: middle; width: 1em; height: 1em; }
+        /* Manual split animation */
+        .manual-split-enter { opacity: 0; transform: translateY(-10px); transition: opacity 0.3s ease, transform 0.3s ease; }
+        .manual-split-enter-active { opacity: 1; transform: translateY(0); }
+        .manual-split-leave-active { opacity: 0; transform: translateY(-10px); transition: opacity 0.3s ease, transform 0.3s ease; }
+         /* Message box styles */
+        #message-box { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 1rem 1.5rem; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); z-index: 1000; display: none; opacity: 0; transition: opacity 0.3s ease-in-out; }
+        #message-box.show { display: block; opacity: 1; }
+        #message-box.success { background-color: #dcfce7; color: #166534; border: 1px solid #86efac; }
+        #message-box.error { background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        /* QR Modal Styles */
+        #qr-modal-backdrop { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1050; opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease; }
+        #qr-modal-backdrop.show { opacity: 1; visibility: visible; }
+        #qr-modal-content { background-color: white; padding: 1.5rem; border-radius: 0.5rem; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3); max-width: 90%; width: 300px; text-align: center; transform: scale(0.95); transition: transform 0.3s ease; }
+         #qr-modal-backdrop.show #qr-modal-content { transform: scale(1); }
+         #qr-code-image { max-width: 100%; height: auto; margin-bottom: 1rem; display: block; margin-left: auto; margin-right: auto; }
+         .qr-link[disabled] { opacity: 0.5; cursor: not-allowed; pointer-events: none; text-decoration: line-through; }
+         /* Toggle button color states */
+         #toggle-all-participants-btn.select-all { @apply text-blue-600 hover:text-blue-800; }
+         #toggle-all-participants-btn.clear-all { @apply text-red-600 hover:text-red-800; }
+         /* Date input style */
+         input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; }
+         input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+         /* Group Fund Section Styles */
+         #group-fund-section { background-color: #e0f2fe; border: 1px solid #bae6fd; }
+         .fund-transaction-item { border-bottom: 1px dashed #cbd5e1; padding-bottom: 0.5rem; margin-bottom: 0.5rem; }
+         .fund-transaction-item:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+         /* Tab Styles */
+         .tab-button {
+             @apply px-4 py-2 text-sm font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-800 hover:border-gray-300 focus:outline-none transition duration-150 ease-in-out;
+         }
+         .tab-button.active {
+             @apply text-green-600 border-green-500 font-semibold;
+         }
+         .tab-content {
+             display: none; /* Hidden by default */
+             margin-top: 1.5rem;
+         }
+         .tab-content.active {
+             display: block; /* Shown when active */
+         }
+    </style>
+</head>
+<body class="antialiased text-gray-800">
+    <div class="container mx-auto p-4 max-w-3xl">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-green-700 flex items-center justify-center">
+                <i data-lucide="coffee" class="w-8 h-8 mr-2"></i>
+                CafeThu6
+            </h1>
+            <p class="text-gray-600">Chia sẻ chi phí nhóm dễ dàng</p>
+        </header>
+
+        <div id="message-box">
+            <span id="message-text"></span>
+        </div>
+
+        <nav class="mb-8 border-b border-gray-200">
+            <div class="-mb-px flex space-x-6" aria-label="Tabs">
+                <button class="tab-button active px-6 py-3" data-tab="expenses">
+                    <i data-lucide="receipt" class="mr-1"></i> Chi tiêu
+                </button>
+                <button class="tab-button px-6 py-3" data-tab="group-fund">
+                    <i data-lucide="piggy-bank" class="mr-1"></i> Quỹ nhóm
+                </button>
+                <button class="tab-button px-6 py-3" data-tab="members">
+                    <i data-lucide="users" class="mr-1"></i> Thành viên
+                </button>
+            </div>
+        </nav>
+
+        <div>
+            <div id="tab-content-expenses" class="tab-content active">
+                <div class="bg-green-100 py-2 px-4 rounded-md mb-4 text-center">
+                    <span class="text-green-800 font-medium">Đang xem: Chi tiêu</span>
+                </div>
+                
+                <!-- Fund balance info card -->
+                <div class="bg-gradient-to-r from-sky-100 to-blue-100 p-4 rounded-lg shadow-sm mb-6 flex items-center">
+                    <div class="bg-blue-500 text-white p-2 rounded-full mr-3">
+                        <i data-lucide="piggy-bank" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm text-blue-800">Số dư quỹ nhóm:</p>
+                        <p class="text-3xl font-bold text-blue-600" id="expenses-group-fund-balance">0 VNĐ</p>
+                    </div>
+                    <button class="ml-auto bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium py-1.5 px-3 rounded-md transition-colors duration-200 flex items-center" id="quick-deposit-btn" onclick="displayQrCode('', 'Toàn', '1000000')">
+                        <i data-lucide="qr-code" class="w-4 h-4 mr-1"></i>
+                        Mã QR
+                    </button>
+                </div>
+                
+                <section id="expense-form-section" class="bg-white p-6 rounded-lg shadow-md mb-8">
+                    <h2 class="text-2xl font-semibold mb-4 text-green-600 flex items-center">
+                        <i data-lucide="file-plus" class="w-6 h-6 mr-2"></i>
+                        <span id="form-title">Thêm chi tiêu mới</span>
+                        <button id="cancel-edit-btn" class="hidden ml-4 text-sm text-red-500 hover:text-red-700 font-medium">
+                            <i data-lucide="x" class="mr-1"></i>Hủy sửa
+                        </button>
+                    </h2>
+                    <form id="expense-form">
+                        <input type="hidden" id="edit-expense-id">
+                        <div class="mb-4">
+                            <label for="expense-name" class="block text-sm font-medium text-gray-700 mb-1">Tên chi tiêu:</label>
+                            <input type="text" id="expense-name" name="expense-name" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500" placeholder="VD: Ăn trưa Bún Chả">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label for="expense-amount" class="block text-sm font-medium text-gray-700 mb-1">Số tiền (VNĐ):</label>
+                                <input type="text" id="expense-amount" name="expense-amount" required inputmode="numeric" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500" placeholder="VD: 350,000">
+                            </div>
+                             <div>
+                                <label for="expense-date" class="block text-sm font-medium text-gray-700 mb-1">Ngày chi tiêu:</label>
+                                <input type="date" id="expense-date" name="expense-date" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500">
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <label for="payer" class="block text-sm font-medium text-gray-700 mb-1">Người trả:</label>
+                            <select id="payer" name="payer" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500 bg-white">
+                                </select>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Người tham gia:</label>
+                            <div id="participants-list" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                </div>
+                             <button type="button" id="toggle-all-participants-btn" class="mt-2 text-xs font-medium clear-all">Bỏ chọn tất cả</button>
+                        </div>
+                        <div class="mb-4 flex items-center justify-between">
+                            <span class="text-sm font-medium text-gray-700">Chia đều chi phí?</span>
+                            <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                                <input type="checkbox" name="split-equally-toggle" id="split-equally-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer border-gray-300" checked/>
+                                <label for="split-equally-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer">
+                                     <span class="toggle-ball absolute left-0 block w-6 h-6 rounded-full bg-white shadow inset-y-0"></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div id="manual-split-section" class="hidden mb-4 space-y-3">
+                             <label class="block text-sm font-medium text-gray-700 mb-1">Nhập số tiền mỗi người trả:</label>
+                             <div id="manual-split-inputs" class="space-y-2"></div>
+                             <p id="manual-split-total-info" class="text-sm text-gray-600 mt-2">Tổng đã nhập: <span id="manual-split-current-total" class="font-semibold">0</span> VNĐ / <span id="manual-split-required-total" class="font-semibold">0</span> VNĐ</p>
+                             <p id="manual-split-error" class="text-sm text-red-600 hidden">Tổng số tiền nhập phải bằng tổng chi tiêu.</p>
+                        </div>
+                        <button type="submit" id="save-expense-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-150 ease-in-out">
+                            <i data-lucide="save" class="mr-1"></i><span id="save-btn-text">Lưu chi tiêu</span>
+                        </button>
+                    </form>
+                </section>
+
+                <section id="expense-list-section" class="mb-8">
+                    <h2 class="text-2xl font-semibold mb-4 text-green-600 flex items-center">
+                        <i data-lucide="list" class="w-6 h-6 mr-2"></i>
+                        Danh sách chi tiêu
+                    </h2>
+                    <div id="expense-list" class="space-y-3">
+                        <p id="no-expenses-message" class="text-gray-500 italic bg-gray-50 p-6 text-center rounded-lg border border-gray-200">Chưa có chi tiêu nào được thêm.</p>
+                    </div>
+                </section>
+
+                <section id="results-section" class="bg-white p-6 rounded-lg shadow-md mb-8">
+                    <h2 class="text-2xl font-semibold mb-4 text-green-600 flex items-center">
+                        <i data-lucide="calculator" class="w-6 h-6 mr-2"></i>
+                        Kết quả chia tiền
+                    </h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                            <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                                <i data-lucide="users" class="w-5 h-5 mr-2 text-green-500"></i>
+                                Tổng kết cá nhân
+                            </h3>
+                            <ul id="individual-summary" class="space-y-2">
+                                <li class="text-gray-500 italic">Chưa có dữ liệu để tính toán.</li>
+                            </ul>
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                            <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                                <i data-lucide="arrows-right-left" class="w-5 h-5 mr-2 text-green-500"></i>
+                                Giao dịch cần thực hiện
+                            </h3>
+                            <ul id="transactions" class="space-y-2">
+                                <li class="text-gray-500 italic">Chưa có dữ liệu để tính toán.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div id="tab-content-group-fund" class="tab-content">
+                <div class="bg-blue-100 py-2 px-4 rounded-md mb-4 text-center">
+                    <span class="text-blue-800 font-medium">Đang xem: Quỹ nhóm</span>
+                </div>
+                <section id="group-fund-section" class="p-6 rounded-lg shadow-md mb-8">
+                    <h2 class="text-2xl font-semibold mb-4 text-sky-700 flex items-center">
+                        <i data-lucide="piggy-bank" class="w-6 h-6 mr-2"></i>
+                        Quản lý Quỹ nhóm
+                    </h2>
+                    
+                    <!-- Balance Card -->
+                    <div class="bg-gradient-to-r from-blue-500 to-sky-500 text-white p-5 rounded-lg shadow-md mb-6">
+                        <p class="text-sm font-medium text-blue-100 mb-1">Số dư hiện tại:</p>
+                        <p class="text-3xl font-bold" id="group-fund-balance-card">0 VNĐ</p>
+                    </div>
+                    
+                    <!-- Fund Pie Chart -->
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-3 text-gray-700">Biểu đồ Quỹ</h3>
+                        <div class="bg-white p-3 rounded shadow-sm">
+                            <canvas id="fund-pie-chart" width="400" height="200"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2 text-gray-700">Thông tin quỹ</h3>
+                            <p class="mb-4">Số dư hiện tại: <strong id="group-fund-balance-info" class="text-xl text-sky-600">0 VNĐ</strong></p>
+
+                            <!-- Member Fund Balances -->
+                            <div class="mb-4">
+                                <h4 class="text-md font-semibold mb-2 text-gray-700 flex items-center">
+                                    <i data-lucide="wallet" class="w-4 h-4 mr-1 text-sky-500"></i>
+                                    Số dư thành viên
+                                </h4>
+                                <div class="bg-white p-3 rounded border border-gray-200 max-h-40 overflow-y-auto shadow-sm">
+                                    <ul id="member-balances-list" class="divide-y divide-gray-100">
+                                        <!-- Member balances will be populated here -->
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <h4 class="text-md font-semibold mb-2 text-gray-700 flex items-center">
+                                <i data-lucide="coins" class="w-4 h-4 mr-1 text-sky-500"></i>
+                                Nộp tiền vào quỹ
+                            </h4>
+                            <form id="deposit-form" class="space-y-3 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                                <div>
+                                    <label for="deposit-member" class="block text-sm font-medium text-gray-700 mb-1">Thành viên</label>
+                                    <select id="deposit-member" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500">
+                                        <!-- Options will be populated here -->
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="deposit-amount" class="block text-sm font-medium text-gray-700 mb-1">Số tiền</label>
+                                    <div class="relative">
+                                        <input type="text" id="deposit-amount" placeholder="Số tiền" class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500">
+                                        <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500">VNĐ</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label for="deposit-date" class="block text-sm font-medium text-gray-700 mb-1">Ngày</label>
+                                    <input type="date" id="deposit-date" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500">
+                                </div>
+                                <div>
+                                    <label for="deposit-note" class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
+                                    <input type="text" id="deposit-note" placeholder="Ghi chú (không bắt buộc)" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500">
+                                </div>
+                                <div class="flex justify-end">
+                                    <button type="submit" class="bg-gradient-to-r from-sky-500 to-indigo-600 text-white px-4 py-2 rounded-md hover:opacity-90 transition-opacity flex items-center">
+                                        <i data-lucide="save" class="w-4 h-4 mr-2"></i>
+                                        Lưu khoản nộp
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2 text-gray-700">Lịch sử giao dịch quỹ</h3>
+                            <div id="group-fund-transactions-log" class="max-h-60 overflow-y-auto bg-white p-3 rounded border border-gray-200 text-sm space-y-2">
+                                <p id="no-fund-transactions-message" class="text-gray-500 italic">Chưa có giao dịch quỹ nào.</p>
+                                </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div id="tab-content-members" class="tab-content">
+                <div class="bg-purple-100 py-2 px-4 rounded-md mb-4 text-center">
+                    <span class="text-purple-800 font-medium">Đang xem: Thành viên</span>
+                </div>
+                <section id="members-section" class="bg-white p-6 rounded-lg shadow-md mb-8">
+                    <h2 class="text-2xl font-semibold mb-4 text-purple-600 flex items-center">
+                        <i data-lucide="users" class="w-6 h-6 mr-2"></i>
+                        Quản lý Thành viên
+                    </h2>
+                    
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-3 text-gray-700">Danh sách thành viên</h3>
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <div id="members-list" class="space-y-3">
+                                <!-- Member list will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <button id="clear-all-data-btn" class="mt-6 mb-8 w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-50 transition duration-150 ease-in-out">
+            <i data-lucide="trash-2" class="mr-1"></i>Xóa tất cả dữ liệu
+        </button>
+
+
+        <footer class="text-center mt-12 text-gray-500 text-sm">
+            <p>Made by Cursor + Claude</p>
+            <p>&copy; <span id="copyright-year"></span> CafeThu6. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <div id="qr-modal-backdrop">
+        <div id="qr-modal-content">
+            <img id="qr-code-image" alt="QR Code">
+            <h3 class="text-lg font-semibold mb-2">Quét mã để chuyển khoản</h3>
+            <p class="text-sm text-gray-600 mb-4"><span id="qr-instruction"></span></p>
+            <button id="close-qr-modal-btn" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition duration-150 ease-in-out">
+                <i data-lucide="x" class="mr-1"></i>Đóng
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        let members = ["Giang", "Quân", "Toàn", "Quang", "Trung", "Nhật"];
+        let bankAccounts = { 
+            "Giang": "9876543210", 
+            "Quân": "8765432109", 
+            "Toàn": "1240067256", 
+            "Quang": "6543210987", 
+            "Trung": "5432109876", 
+            "Nhật": "4321098765" 
+        };
+        const bankCode = "BIDV";
+        const LOCAL_STORAGE_KEY_EXPENSES = 'ezsplit_expenses_v2';
+        const LOCAL_STORAGE_KEY_FUND = 'ezsplit_groupfund_v2';
+        const LOCAL_STORAGE_KEY_MEMBERS = 'ezsplit_members_v2';
+        const LOCAL_STORAGE_KEY_BANK_ACCOUNTS = 'ezsplit_bankaccounts_v2';
+        const GROUP_FUND_PAYER_ID = "__GROUP_FUND__";
+        const CURRENCY_FORMATTER = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' });
+        const INPUT_AMOUNT_FORMATTER = new Intl.NumberFormat('vi-VN');
+
+        // --- DOM Elements ---
+        let expenseForm = document.getElementById('expense-form');
+        let expenseDateInput = document.getElementById('expense-date');
+        let expenseNameInput = document.getElementById('expense-name');
+        let expenseAmountInput = document.getElementById('expense-amount');
+        let editExpenseIdInput = document.getElementById('edit-expense-id');
+        let payerSelect = document.getElementById('payer');
+        let participantsListDiv = document.getElementById('participants-list');
+        let formTitle = document.getElementById('form-title');
+        let saveBtnText = document.getElementById('save-btn-text');
+        let saveExpenseBtn = document.getElementById('save-expense-btn');
+        let cancelEditBtn = document.getElementById('cancel-edit-btn');
+        let splitEquallyToggle = document.getElementById('split-equally-toggle');
+        let manualSplitSection = document.getElementById('manual-split-section');
+        let manualSplitInputsDiv = document.getElementById('manual-split-inputs');
+        let manualSplitError = document.getElementById('manual-split-error');
+        let toggleAllParticipantsBtn = document.getElementById('toggle-all-participants-btn');
+        let expenseList = document.getElementById('expense-list');
+        let noExpensesMessage = document.getElementById('no-expenses-message');
+        let copyrightYearSpan = document.getElementById('copyright-year');
+        let clearAllDataBtn = document.getElementById('clear-all-data-btn');
+        let closeQrModalBtn = document.getElementById('close-qr-modal-btn');
+        let qrModalBackdrop = document.getElementById('qr-modal-backdrop');
+
+        // Group Fund Elements
+        let groupFundBalanceCardSpan = document.getElementById('group-fund-balance-card');
+        let groupFundBalanceInfoSpan = document.getElementById('group-fund-balance-info');
+        let expensesGroupFundBalanceSpan = document.getElementById('expenses-group-fund-balance');
+        let depositForm = document.getElementById('deposit-form');
+        let depositMemberSelect = document.getElementById('deposit-member');
+        let depositAmountInput = document.getElementById('deposit-amount');
+        let depositDateInput = document.getElementById('deposit-date');
+        let groupFundTransactionsLogDiv = document.getElementById('group-fund-transactions-log');
+        let noFundTransactionsMessage = document.getElementById('no-fund-transactions-message');
+        
+        // Tab Elements
+        let tabButtons = document.querySelectorAll('.tab-button');
+        let tabContents = document.querySelectorAll('.tab-content');
+
+
+        // --- Application State ---
+        let expenses = [];
+        let groupFundTransactions = [];
+        let groupFundBalance = 0;
+        let memberBalances = {};
+        let editingExpenseId = null;
+
+        // --- Utility Functions ---
+        const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
+        const formatCurrency = (amount) => CURRENCY_FORMATTER.format(amount);
+        
+        const formatAmountInput = (value) => { 
+            // Remove non-numeric characters
+            const numericValue = value.replace(/[^\d]/g, '');
+            if (!numericValue) return '';
+            
+            // Parse to number and format
+            const number = parseInt(numericValue, 10);
+            return INPUT_AMOUNT_FORMATTER.format(number);
+        };
+        
+        const parseFormattedAmount = (formattedValue) => { 
+            // Remove all non-numeric characters except decimal point
+            const numberString = formattedValue.replace(/[^\d]/g, '');
+            return parseInt(numberString, 10) || 0;
+        };
+        
+        const formatDisplayDate = (isoDate) => { 
+            if (!isoDate) return '';
+            const parts = isoDate.split('-');
+            if (parts.length !== 3) return isoDate;
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        };
+        
+        const getTodayDateString = () => { 
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        // Message display function
+        const showMessage = (message, type = 'success', duration = 3000) => {
+            const messageBox = document.getElementById('message-box');
+            const messageText = document.getElementById('message-text');
+            
+            // Set message content and type
+            messageText.textContent = message;
+            messageBox.className = 'show';
+            messageBox.classList.add(type);
+            
+            // Show the message
+            messageBox.style.display = 'block';
+            setTimeout(() => {
+                messageBox.style.opacity = '1';
+            }, 10);
+            
+            // Hide the message after duration
+            setTimeout(() => {
+                messageBox.style.opacity = '0';
+                setTimeout(() => {
+                    messageBox.style.display = 'none';
+                    messageBox.classList.remove(type);
+                }, 300);
+            }, duration);
+        };
+
+        // --- Data Persistence ---
+        const saveDataToLocalStorage = () => {
+            localStorage.setItem(LOCAL_STORAGE_KEY_EXPENSES, JSON.stringify(expenses));
+            const fundData = { 
+                balance: groupFundBalance, 
+                transactions: groupFundTransactions,
+                memberBalances: memberBalances
+            };
+            localStorage.setItem(LOCAL_STORAGE_KEY_FUND, JSON.stringify(fundData));
+            localStorage.setItem(LOCAL_STORAGE_KEY_MEMBERS, JSON.stringify(members));
+            localStorage.setItem(LOCAL_STORAGE_KEY_BANK_ACCOUNTS, JSON.stringify(bankAccounts));
+        };
+
+        const loadDataFromLocalStorage = () => {
+            const storedExpenses = localStorage.getItem(LOCAL_STORAGE_KEY_EXPENSES);
+            expenses = storedExpenses ? JSON.parse(storedExpenses) : [];
+            
+            const storedFundData = localStorage.getItem(LOCAL_STORAGE_KEY_FUND);
+            if (storedFundData) {
+                const fundData = JSON.parse(storedFundData);
+                groupFundBalance = fundData.balance || 0;
+                groupFundTransactions = fundData.transactions || [];
+                memberBalances = fundData.memberBalances || {};
+                
+                // Initialize balances for any members that don't have them yet
+                members.forEach(member => {
+                    if (memberBalances[member] === undefined) {
+                        memberBalances[member] = 0;
+                    }
+                });
+            } else {
+                groupFundBalance = 0; 
+                groupFundTransactions = [];
+                memberBalances = {};
+                
+                // Initialize all member balances to 0
+                members.forEach(member => {
+                    memberBalances[member] = 0;
+                });
+            }
+
+            // Check if members list already exists in localStorage
+            const storedMembers = localStorage.getItem(LOCAL_STORAGE_KEY_MEMBERS);
+            if (!storedMembers) {
+                // If not, save the default 6 members to localStorage
+                localStorage.setItem(LOCAL_STORAGE_KEY_MEMBERS, JSON.stringify(members));
+            } else {
+                // If members already exist in localStorage, use them
+                const loadedMembers = JSON.parse(storedMembers);
+                // Check if default members are missing
+                const defaultMembersSet = new Set(members);
+                let missingDefaultMembers = false;
+                
+                // If any default members are missing, add them
+                members.forEach(defaultMember => {
+                    if (!loadedMembers.includes(defaultMember)) {
+                        loadedMembers.push(defaultMember);
+                        missingDefaultMembers = true;
+                    }
+                });
+                
+                if (missingDefaultMembers) {
+                    localStorage.setItem(LOCAL_STORAGE_KEY_MEMBERS, JSON.stringify(loadedMembers));
+                    members = loadedMembers;
+                } else {
+                    members = loadedMembers;
+                }
+            }
+
+            // Same for bank accounts
+            const storedBankAccounts = localStorage.getItem(LOCAL_STORAGE_KEY_BANK_ACCOUNTS);
+            if (!storedBankAccounts) {
+                // If not, save the default bank accounts to localStorage
+                localStorage.setItem(LOCAL_STORAGE_KEY_BANK_ACCOUNTS, JSON.stringify(bankAccounts));
+            } else {
+                // If bank accounts already exist in localStorage, use them
+                const loadedBankAccounts = JSON.parse(storedBankAccounts);
+                // Ensure default members have their bank accounts
+                members.forEach(member => {
+                    if (bankAccounts[member] && !loadedBankAccounts[member]) {
+                        loadedBankAccounts[member] = bankAccounts[member];
+                    }
+                });
+                
+                localStorage.setItem(LOCAL_STORAGE_KEY_BANK_ACCOUNTS, JSON.stringify(loadedBankAccounts));
+                bankAccounts = loadedBankAccounts;
+            }
+        };
+
+        // --- QR Code Modal Functions ---
+        const showQrModal = () => { 
+            qrModalBackdrop.classList.add('show');
+        };
+        
+        const hideQrModal = () => { 
+            qrModalBackdrop.classList.remove('show');
+        };
+        
+        const displayQrCode = (debtor, creditor, amount) => { 
+            // Generate QR code for bank transfer
+            const amountValue = parseFloat(amount);
+            const accountNumber = creditor in bankAccounts ? bankAccounts[creditor] : '';
+            
+            // Build instruction text
+            const instruction = `${debtor} cần chuyển ${formatCurrency(amountValue)} cho ${creditor}`;
+            document.getElementById('qr-instruction').textContent = instruction;
+            
+            // Generate QR Code using the provided endpoint
+            if (accountNumber) {
+                const description = `${debtor} chuyen tien cho ${creditor}`;
+                const qrUrl = `https://qr.sepay.vn/img?acc=${accountNumber}&bank=BIDV&amount=${amountValue}&des=${encodeURIComponent(description)}&template=compact&download=false`;
+                document.getElementById('qr-code-image').src = qrUrl;
+            } else {
+                // Fallback in case account number is not available
+                document.getElementById('qr-code-image').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=No%20Account%20Number';
+            }
+            
+            showQrModal();
+        };
+
+        // --- Core Logic Functions ---
+        const populateMembers = () => {
+            // Payer dropdown (Expense Form) - Includes Group Fund
+            payerSelect.innerHTML = '<option value="" disabled selected>-- Chọn người trả --</option>';
+            const groupFundOption = document.createElement('option');
+            groupFundOption.value = GROUP_FUND_PAYER_ID; groupFundOption.textContent = 'Quỹ nhóm';
+            groupFundOption.classList.add('font-semibold', 'text-sky-700'); payerSelect.appendChild(groupFundOption);
+            members.forEach(member => { const option = document.createElement('option'); option.value = member; option.textContent = member; payerSelect.appendChild(option); });
+
+            // Deposit Member dropdown (Deposit Form) - Only members
+            depositMemberSelect.innerHTML = '<option value="" disabled selected>-- Chọn người nộp --</option>';
+            members.forEach(member => { const option = document.createElement('option'); option.value = member; option.textContent = member; depositMemberSelect.appendChild(option); });
+
+            // Participant checkboxes
+            participantsListDiv.innerHTML = '';
+            members.forEach(member => { 
+                const div = document.createElement('div');
+                div.className = 'flex items-center';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.name = 'participants';
+                checkbox.value = member;
+                checkbox.id = `participant-${member}`;
+                checkbox.className = 'participant-checkbox w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500';
+                checkbox.checked = true;
+                
+                const label = document.createElement('label');
+                label.htmlFor = `participant-${member}`;
+                label.className = 'ml-2 block text-gray-700';
+                label.textContent = member;
+                
+                div.appendChild(checkbox);
+                div.appendChild(label);
+                participantsListDiv.appendChild(div);
+            });
+            
+            participantsListDiv.querySelectorAll('.participant-checkbox').forEach(checkbox => { 
+                checkbox.addEventListener('change', handleParticipantChange); 
+            });
+            
+            updateToggleAllButtonState();
+        };
+
+        const handleParticipantChange = () => { 
+            updateToggleAllButtonState();
+            renderManualSplitInputs();
+        };
+        
+        const updateToggleAllButtonState = () => {
+            const checkboxes = participantsListDiv.querySelectorAll('.participant-checkbox');
+            const checkedCount = [...checkboxes].filter(cb => cb.checked).length;
+            
+            if (checkedCount === checkboxes.length) {
+                toggleAllParticipantsBtn.textContent = 'Bỏ chọn tất cả';
+                toggleAllParticipantsBtn.classList.remove('select-all');
+                toggleAllParticipantsBtn.classList.add('clear-all');
+            } else if (checkedCount === 0) {
+                toggleAllParticipantsBtn.textContent = 'Chọn tất cả';
+                toggleAllParticipantsBtn.classList.remove('clear-all');
+                toggleAllParticipantsBtn.classList.add('select-all');
+            } else {
+                toggleAllParticipantsBtn.textContent = 'Bỏ chọn tất cả';
+                toggleAllParticipantsBtn.classList.remove('select-all');
+                toggleAllParticipantsBtn.classList.add('clear-all');
+            }
+        };
+        
+        const renderManualSplitInputs = () => {
+            const selectedParticipants = getSelectedParticipants();
+            manualSplitInputsDiv.innerHTML = '';
+            
+            selectedParticipants.forEach(participant => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center justify-between';
+                
+                const label = document.createElement('label');
+                label.htmlFor = `split-amount-${participant}`;
+                label.className = 'text-sm font-medium text-gray-700';
+                label.textContent = participant;
+                
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.id = `split-amount-${participant}`;
+                input.name = `split-amount-${participant}`;
+                input.className = 'split-amount-input w-32 px-2 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500';
+                input.placeholder = '0';
+                input.inputMode = 'numeric';
+                input.addEventListener('input', (e) => {
+                    e.target.value = formatAmountInput(e.target.value);
+                    updateManualSplitTotal();
+                });
+                
+                div.appendChild(label);
+                div.appendChild(input);
+                manualSplitInputsDiv.appendChild(div);
+            });
+            
+            updateManualSplitTotal();
+        };
+        
+        const updateManualSplitTotal = () => {
+            const totalExpense = parseFormattedAmount(expenseAmountInput.value);
+            const inputs = manualSplitInputsDiv.querySelectorAll('.split-amount-input');
+            let currentTotal = 0;
+            
+            inputs.forEach(input => {
+                currentTotal += parseFormattedAmount(input.value);
+            });
+            
+            const manualSplitCurrentTotalSpan = document.getElementById('manual-split-current-total');
+            const manualSplitRequiredTotalSpan = document.getElementById('manual-split-required-total');
+            
+            manualSplitCurrentTotalSpan.textContent = formatCurrency(currentTotal).replace(' ₫', '');
+            manualSplitRequiredTotalSpan.textContent = formatCurrency(totalExpense).replace(' ₫', '');
+            
+            if (currentTotal !== totalExpense) {
+                manualSplitError.classList.remove('hidden');
+            } else {
+                manualSplitError.classList.add('hidden');
+            }
+        };
+        
+        const getSelectedParticipants = () => {
+            const checkboxes = participantsListDiv.querySelectorAll('.participant-checkbox:checked');
+            return [...checkboxes].map(cb => cb.value);
+        };
+        
+        const getManualSplits = () => {
+            const result = {};
+            const selectedParticipants = getSelectedParticipants();
+            
+            selectedParticipants.forEach(participant => {
+                const input = document.getElementById(`split-amount-${participant}`);
+                result[participant] = parseFormattedAmount(input.value);
+            });
+            
+            return result;
+        };
+        
+        const renderExpenseList = () => {
+            expenseList.innerHTML = '';
+            
+            if (expenses.length === 0) {
+                noExpensesMessage.classList.remove('hidden');
+                return;
+            }
+            
+            noExpensesMessage.classList.add('hidden');
+            
+            // Sort expenses by date, most recent first
+            const sortedExpenses = [...expenses].sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            sortedExpenses.forEach(expense => {
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-lg shadow-md p-4';
+                card.dataset.expenseId = expense.id;
+                
+                const header = document.createElement('div');
+                header.className = 'flex justify-between items-start mb-2';
+                
+                const titleDate = document.createElement('div');
+                
+                const title = document.createElement('h3');
+                title.className = 'text-lg font-medium text-gray-800';
+                title.textContent = expense.name;
+                
+                const date = document.createElement('p');
+                date.className = 'text-sm text-gray-500';
+                date.textContent = formatDisplayDate(expense.date);
+                
+                titleDate.appendChild(title);
+                titleDate.appendChild(date);
+                
+                const actions = document.createElement('div');
+                actions.className = 'flex space-x-2';
+                
+                const editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.className = 'text-blue-600 hover:text-blue-800';
+                editBtn.innerHTML = '<i data-lucide="edit" class="w-4 h-4"></i>';
+                editBtn.addEventListener('click', () => handleEditExpense(expense.id));
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.type = 'button';
+                deleteBtn.className = 'text-red-600 hover:text-red-800';
+                deleteBtn.innerHTML = '<i data-lucide="trash" class="w-4 h-4"></i>';
+                deleteBtn.addEventListener('click', () => handleDeleteExpense(expense.id));
+                
+                actions.appendChild(editBtn);
+                actions.appendChild(deleteBtn);
+                
+                header.appendChild(titleDate);
+                header.appendChild(actions);
+                
+                const body = document.createElement('div');
+                
+                const amount = document.createElement('p');
+                amount.className = 'text-xl font-bold text-green-600 mb-1';
+                amount.textContent = formatCurrency(expense.amount);
+                
+                const payer = document.createElement('p');
+                payer.className = 'text-sm text-gray-700';
+                
+                if (expense.payer === GROUP_FUND_PAYER_ID) {
+                    payer.innerHTML = `Người trả: <span class="font-semibold text-sky-700">Quỹ nhóm</span>`;
+                } else {
+                    payer.innerHTML = `Người trả: <span class="font-semibold">${expense.payer}</span>`;
+                }
+                
+                const participants = document.createElement('p');
+                participants.className = 'text-sm text-gray-700';
+                participants.textContent = `Người tham gia: ${expense.participants.join(', ')}`;
+                
+                body.appendChild(amount);
+                body.appendChild(payer);
+                body.appendChild(participants);
+                
+                card.appendChild(header);
+                card.appendChild(body);
+                
+                expenseList.appendChild(card);
+            });
+            
+            // Initialize icons for the newly created buttons
+            lucide.createIcons({
+                attrs: {
+                    class: 'w-4 h-4'
+                }
+            });
+        };
+        
+        const renderGroupFundTransactions = () => {
+            if (groupFundTransactions.length === 0) {
+                noFundTransactionsMessage.classList.remove('hidden');
+                return;
+            }
+            
+            noFundTransactionsMessage.classList.add('hidden');
+            groupFundTransactionsLogDiv.innerHTML = '';
+            
+            // Sort transactions by date, most recent first
+            const sortedTransactions = [...groupFundTransactions].sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            sortedTransactions.forEach(transaction => {
+                const item = document.createElement('div');
+                item.className = 'fund-transaction-item';
+                
+                const header = document.createElement('div');
+                header.className = 'flex justify-between items-center';
+                
+                const dateAmount = document.createElement('div');
+                
+                const date = document.createElement('span');
+                date.className = 'text-xs text-gray-500';
+                date.textContent = formatDisplayDate(transaction.date);
+                
+                const amount = document.createElement('span');
+                amount.className = transaction.type === 'deposit' ? 'ml-2 text-green-600 font-medium' : 'ml-2 text-red-600 font-medium';
+                amount.textContent = `${transaction.type === 'deposit' ? '+' : '-'} ${formatCurrency(transaction.amount)}`;
+                
+                dateAmount.appendChild(date);
+                dateAmount.appendChild(amount);
+                
+                header.appendChild(dateAmount);
+                
+                const description = document.createElement('p');
+                description.className = 'text-sm text-gray-700';
+                
+                if (transaction.type === 'deposit') {
+                    description.textContent = `${transaction.member} đã nộp tiền vào quỹ`;
+                } else if (transaction.type === 'expense') {
+                    description.textContent = `Quỹ chi trả cho "${transaction.expenseName}"`;
+                }
+                
+                item.appendChild(header);
+                item.appendChild(description);
+                
+                groupFundTransactionsLogDiv.appendChild(item);
+            });
+            
+            // Apply Lucide icons to any new elements
+            lucide.createIcons({
+                attrs: {
+                    class: 'w-4 h-4'
+                }
+            });
+        };
+
+        const renderGroupFundStatus = () => { 
+            // Cập nhật tất cả các phần tử hiển thị số dư quỹ
+            groupFundBalanceCardSpan.textContent = formatCurrency(groupFundBalance);
+            groupFundBalanceInfoSpan.textContent = formatCurrency(groupFundBalance);
+            expensesGroupFundBalanceSpan.textContent = formatCurrency(groupFundBalance);
+            
+            // Render member balances
+            renderMemberBalances();
+            
+            // Update the pie chart whenever fund status changes
+            updateFundPieChart();
+        };
+
+        // Fund Pie Chart functions
+        let fundPieChart = null;
+
+        const updateFundPieChart = () => {
+            // Get the chart context
+            const ctx = document.getElementById('fund-pie-chart').getContext('2d');
+            
+            // Prepare the data for the pie chart using memberBalances
+            const chartLabels = [];
+            const chartData = [];
+            
+            // Add only members with positive balances
+            members.forEach(member => {
+                const balance = memberBalances[member] || 0;
+                if (balance > 0) {
+                    chartLabels.push(member);
+                    chartData.push(balance);
+                }
+            });
+            
+            // Generate colors for each segment (one per member)
+            const colors = [
+                '#4ade80', // green-400
+                '#60a5fa', // blue-400
+                '#f87171', // red-400
+                '#facc15', // yellow-400
+                '#a78bfa', // purple-400
+                '#fb923c'  // orange-400
+            ];
+            
+            // If there's no data, show a placeholder
+            if (chartLabels.length === 0) {
+                chartLabels.push('Chưa có dữ liệu');
+                chartData.push(100);
+            }
+            
+            // If there's an existing chart, destroy it before creating a new one
+            if (fundPieChart) {
+                fundPieChart.destroy();
+            }
+            
+            // Create a new pie chart
+            fundPieChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        data: chartData,
+                        backgroundColor: colors.slice(0, chartLabels.length),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                font: {
+                                    family: 'Roboto, sans-serif'
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.chart.data.datasets[0].data.reduce((sum, val) => sum + val, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: ${formatCurrency(value)} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        };
+
+        const calculateResults = () => {
+            if (expenses.length === 0) {
+                document.getElementById('individual-summary').innerHTML = '<li class="text-gray-500 italic">Chưa có dữ liệu để tính toán.</li>';
+                document.getElementById('transactions').innerHTML = '<li class="text-gray-500 italic">Chưa có dữ liệu để tính toán.</li>';
+                return;
+            }
+            
+            // Calculate how much each person paid and owes
+            const balances = {};
+            members.forEach(member => balances[member] = { paid: 0, owes: 0, net: 0 });
+            
+            // Process all expenses
+            expenses.forEach(expense => {
+                const amount = expense.amount;
+                
+                // Skip group fund expenses for settlement calculations
+                if (expense.payer === GROUP_FUND_PAYER_ID) {
+                    return; // Skip this expense - it's paid from the group fund
+                }
+                
+                const equalSplit = amount / expense.participants.length;
+                
+                // Add what the payer paid
+                balances[expense.payer].paid += amount;
+                
+                // Add what each participant owes
+                if (expense.equalSplit) {
+                    expense.participants.forEach(participant => {
+                        balances[participant].owes += equalSplit;
+                    });
+                } else {
+                    // For manual splits
+                    Object.entries(expense.splits).forEach(([participant, amount]) => {
+                        balances[participant].owes += amount;
+                    });
+                }
+            });
+            
+            // Calculate net balances
+            members.forEach(member => {
+                balances[member].net = balances[member].paid - balances[member].owes;
+            });
+            
+            // Render individual summary
+            const individualSummaryEl = document.getElementById('individual-summary');
+            individualSummaryEl.innerHTML = '';
+            
+            members.forEach(member => {
+                const balance = balances[member];
+                const li = document.createElement('li');
+                li.className = 'py-1 border-b border-gray-100 flex justify-between';
+                
+                const name = document.createElement('span');
+                name.textContent = member;
+                
+                const summary = document.createElement('span');
+                summary.className = balance.net > 0 ? 'text-green-600 font-semibold' : balance.net < 0 ? 'text-red-600 font-semibold' : '';
+                summary.textContent = formatCurrency(balance.net);
+                
+                li.appendChild(name);
+                li.appendChild(summary);
+                individualSummaryEl.appendChild(li);
+            });
+            
+            // Check if there are any non-fund expenses
+            const hasNonFundExpenses = expenses.some(expense => expense.payer !== GROUP_FUND_PAYER_ID);
+            
+            // If all expenses are from the fund, show a message
+            if (!hasNonFundExpenses) {
+                document.getElementById('transactions').innerHTML = '<li class="text-gray-500 italic">Tất cả chi tiêu đều từ quỹ nhóm, không cần chuyển tiền.</li>';
+                
+                // Update fund display
+                renderGroupFundStatus();
+                renderGroupFundTransactions();
+                return;
+            }
+            
+            // Calculate transactions
+            const debtors = members.filter(member => balances[member].net < 0)
+                .sort((a, b) => balances[a].net - balances[b].net);
+            const creditors = members.filter(member => balances[member].net > 0)
+                .sort((a, b) => balances[b].net - balances[a].net);
+            
+            // Generate simplified transactions
+            const transactions = [];
+            let totalMoved = 0;
+            
+            while (debtors.length > 0 && creditors.length > 0) {
+                const debtor = debtors[0];
+                const creditor = creditors[0];
+                
+                const debtAmount = Math.abs(balances[debtor].net);
+                const creditAmount = balances[creditor].net;
+                
+                const transferAmount = Math.min(debtAmount, creditAmount);
+                
+                totalMoved += transferAmount;
+                transactions.push({
+                    from: debtor,
+                    to: creditor,
+                    amount: Math.round(transferAmount)
+                });
+                
+                balances[debtor].net += transferAmount;
+                balances[creditor].net -= transferAmount;
+                
+                if (Math.abs(balances[debtor].net) < 1) {
+                    debtors.shift();
+                }
+                
+                if (Math.abs(balances[creditor].net) < 1) {
+                    creditors.shift();
+                }
+            }
+            
+            // Render transactions
+            const transactionsEl = document.getElementById('transactions');
+            transactionsEl.innerHTML = '';
+            
+            if (transactions.length === 0) {
+                transactionsEl.innerHTML = '<li class="text-gray-500 italic">Không có giao dịch cần thực hiện.</li>';
+            } else {
+                transactions.forEach(transaction => {
+                    const li = document.createElement('li');
+                    li.className = 'py-1 border-b border-gray-100';
+                    
+                    const qrBtn = document.createElement('button');
+                    qrBtn.type = 'button';
+                    qrBtn.className = 'qr-link ml-2 text-blue-600 hover:text-blue-800 text-xs';
+                    qrBtn.dataset.debtor = transaction.from;
+                    qrBtn.dataset.creditor = transaction.to;
+                    qrBtn.dataset.amount = transaction.amount;
+                    qrBtn.innerHTML = '<i data-lucide="qr-code" class="w-3 h-3 mr-1"></i>QR';
+                    qrBtn.addEventListener('click', () => {
+                        displayQrCode(transaction.from, transaction.to, transaction.amount);
+                    });
+                    
+                    // Check if QR code is available for this transaction
+                    if (!(transaction.to in bankAccounts)) {
+                        qrBtn.disabled = true;
+                        qrBtn.setAttribute('disabled', 'disabled');
+                    }
+                    
+                    li.innerHTML = `<span class="font-medium">${transaction.from}</span> chuyển <span class="font-semibold text-green-600">${formatCurrency(transaction.amount)}</span> cho <span class="font-medium">${transaction.to}</span>`;
+                    li.appendChild(qrBtn);
+                    
+                    transactionsEl.appendChild(li);
+                });
+                
+                // Initialize icons for the QR buttons
+                lucide.createIcons({
+                    attrs: {
+                        class: 'w-3 h-3'
+                    }
+                });
+            }
+            
+            // Update fund display
+            renderGroupFundStatus();
+            renderGroupFundTransactions();
+        };
+
+        const resetForm = () => {
+            // Reset expense form
+            expenseForm.reset();
+            editingExpenseId = null; editExpenseIdInput.value = '';
+            formTitle.textContent = 'Thêm chi tiêu mới'; saveBtnText.textContent = 'Lưu chi tiêu';
+            saveExpenseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600'); saveExpenseBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+            cancelEditBtn.classList.add('hidden');
+            expenseDateInput.value = getTodayDateString();
+            participantsListDiv.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+            splitEquallyToggle.checked = true;
+            manualSplitSection.classList.add('hidden'); manualSplitInputsDiv.innerHTML = ''; manualSplitError.classList.add('hidden');
+            splitEquallyToggle.dispatchEvent(new Event('change'));
+            handleParticipantChange();
+            expenseAmountInput.value = '';
+            updateToggleAllButtonState();
+            // Reset deposit form
+            depositForm.reset();
+            depositDateInput.value = getTodayDateString();
+        };
+
+        const handleFormSubmit = (event) => {
+            event.preventDefault();
+            
+            const name = expenseNameInput.value.trim();
+            const amount = parseFormattedAmount(expenseAmountInput.value);
+            const date = expenseDateInput.value;
+            const payer = payerSelect.value;
+            const participants = getSelectedParticipants();
+            
+            if (participants.length === 0) {
+                showMessage('Vui lòng chọn ít nhất một người tham gia', 'error');
+                return;
+            }
+            
+            const equalSplit = splitEquallyToggle.checked;
+            let splits = {};
+            
+            if (!equalSplit) {
+                splits = getManualSplits();
+                
+                // Validate that manual splits sum to the expense amount
+                const totalSplit = Object.values(splits).reduce((sum, val) => sum + val, 0);
+                if (Math.abs(totalSplit - amount) > 0.01) {
+                    showMessage('Tổng số tiền phân chia không khớp với tổng chi tiêu', 'error');
+                    return;
+                }
+            }
+            
+            // Check if group fund is the payer and has enough balance
+            if (payer === GROUP_FUND_PAYER_ID && amount > groupFundBalance) {
+                showMessage(`Số dư quỹ nhóm không đủ để chi trả khoản này. Số dư hiện tại: ${formatCurrency(groupFundBalance)}`, 'error');
+                return;
+            }
+
+            let expenseId;
+            
+            if (editingExpenseId) {
+                // Edit existing expense
+                const index = expenses.findIndex(e => e.id === editingExpenseId);
+                if (index !== -1) {
+                    const oldExpense = expenses[index];
+                    const updatedExpense = {
+                        ...oldExpense,
+                        name,
+                        amount,
+                        date,
+                        payer,
+                        participants,
+                        equalSplit,
+                        splits: equalSplit ? {} : splits,
+                    };
+                    
+                    // If payer changed to or from group fund, update fund balance accordingly
+                    if (oldExpense.payer === GROUP_FUND_PAYER_ID && payer !== GROUP_FUND_PAYER_ID) {
+                        // Old payer was group fund, new payer is not - refund the group fund
+                        groupFundBalance += oldExpense.amount;
+                        
+                        // Refund the member balances that were previously deducted
+                        if (oldExpense.equalSplit) {
+                            const oldSplitAmount = oldExpense.amount / oldExpense.participants.length;
+                            oldExpense.participants.forEach(participant => {
+                                memberBalances[participant] = (memberBalances[participant] || 0) + oldSplitAmount;
+                            });
+                        } else {
+                            Object.entries(oldExpense.splits).forEach(([participant, splitAmount]) => {
+                                memberBalances[participant] = (memberBalances[participant] || 0) + splitAmount;
+                            });
+                        }
+                        
+                        // Remove the old expense transaction from the fund transactions
+                        groupFundTransactions = groupFundTransactions.filter(t => 
+                            !(t.type === 'expense' && t.expenseId === oldExpense.id));
+                    } 
+                    else if (oldExpense.payer !== GROUP_FUND_PAYER_ID && payer === GROUP_FUND_PAYER_ID) {
+                        // Old payer was not group fund, new payer is - deduct from fund
+                        groupFundBalance -= amount;
+                        
+                        // Update member balances (decrease because fund is paying for their share)
+                        if (equalSplit) {
+                            // Equal split case
+                            const splitAmount = amount / participants.length;
+                            participants.forEach(participant => {
+                                memberBalances[participant] = (memberBalances[participant] || 0) - splitAmount;
+                            });
+                        } else {
+                            // Manual split case
+                            Object.entries(splits).forEach(([participant, splitAmount]) => {
+                                memberBalances[participant] = (memberBalances[participant] || 0) - splitAmount;
+                            });
+                        }
+                        
+                        // Add an expense transaction to the fund
+                        const fundTransaction = {
+                            id: generateId(),
+                            type: 'expense',
+                            expenseId: oldExpense.id,
+                            expenseName: name,
+                            amount: amount,
+                            date: date
+                        };
+                        
+                        groupFundTransactions.push(fundTransaction);
+                    } 
+                    else if (oldExpense.payer === GROUP_FUND_PAYER_ID && payer === GROUP_FUND_PAYER_ID) {
+                        // Both old and new payer are group fund, adjust for amount difference
+                        groupFundBalance = groupFundBalance + oldExpense.amount - amount;
+                        
+                        // Adjust member balances for the difference
+                        // First refund the old amounts
+                        if (oldExpense.equalSplit) {
+                            const oldSplitAmount = oldExpense.amount / oldExpense.participants.length;
+                            oldExpense.participants.forEach(participant => {
+                                memberBalances[participant] = (memberBalances[participant] || 0) + oldSplitAmount;
+                            });
+                        } else {
+                            Object.entries(oldExpense.splits).forEach(([participant, splitAmount]) => {
+                                memberBalances[participant] = (memberBalances[participant] || 0) + splitAmount;
+                            });
+                        }
+                        
+                        // Then deduct the new amounts
+                        if (equalSplit) {
+                            const newSplitAmount = amount / participants.length;
+                            participants.forEach(participant => {
+                                memberBalances[participant] = (memberBalances[participant] || 0) - newSplitAmount;
+                            });
+                        } else {
+                            Object.entries(splits).forEach(([participant, splitAmount]) => {
+                                memberBalances[participant] = (memberBalances[participant] || 0) - splitAmount;
+                            });
+                        }
+                        
+                        // Update the existing fund transaction
+                        const transactionIndex = groupFundTransactions.findIndex(t => 
+                            t.type === 'expense' && t.expenseId === oldExpense.id);
+                        
+                        if (transactionIndex !== -1) {
+                            groupFundTransactions[transactionIndex] = {
+                                ...groupFundTransactions[transactionIndex],
+                                expenseName: name,
+                                amount: amount,
+                                date: date
+                            };
+                        }
+                    }
+                    
+                    expenses[index] = updatedExpense;
+                    expenseId = oldExpense.id;
+                    showMessage('Chi tiêu đã được cập nhật');
+                }
+            } else {
+                // Create new expense
+                expenseId = generateId();
+                const newExpense = {
+                    id: expenseId,
+                    name,
+                    amount,
+                    date,
+                    payer,
+                    participants,
+                    equalSplit,
+                    splits: equalSplit ? {} : splits,
+                };
+                
+                // If group fund is the payer, update fund balance and add a fund transaction
+                if (payer === GROUP_FUND_PAYER_ID) {
+                    groupFundBalance -= amount;
+                    
+                    // Update member balances (decrease because fund is paying for their share)
+                    if (equalSplit) {
+                        // Equal split case
+                        const splitAmount = amount / participants.length;
+                        participants.forEach(participant => {
+                            memberBalances[participant] = (memberBalances[participant] || 0) - splitAmount;
+                        });
+                    } else {
+                        // Manual split case
+                        Object.entries(splits).forEach(([participant, splitAmount]) => {
+                            memberBalances[participant] = (memberBalances[participant] || 0) - splitAmount;
+                        });
+                    }
+                    
+                    const fundTransaction = {
+                        id: generateId(),
+                        type: 'expense',
+                        expenseId: expenseId,
+                        expenseName: name,
+                        amount: amount,
+                        date: date
+                    };
+                    
+                    groupFundTransactions.push(fundTransaction);
+                }
+                
+                expenses.push(newExpense);
+                showMessage('Chi tiêu mới đã được thêm');
+            }
+            
+            saveDataToLocalStorage();
+            renderExpenseList();
+            calculateResults();
+            resetForm();
+        };
+        
+        const handleDepositSubmit = (e) => {
+            e.preventDefault();
+            const amount = parseFormattedAmount(depositAmountInput.value);
+            const member = depositMemberSelect.value;
+            const date = depositDateInput.value;
+            
+            if (amount > 0 && member) {
+                const newTransaction = {
+                    id: generateId(),
+                    type: 'deposit',
+                    amount: amount,
+                    member: member,
+                    date: date
+                };
+                
+                groupFundTransactions.push(newTransaction);
+                groupFundBalance += amount;
+                
+                // Update member balance (increase because they contributed to the fund)
+                memberBalances[member] = (memberBalances[member] || 0) + amount;
+                
+                saveDataToLocalStorage();
+                renderGroupFundStatus();
+                renderGroupFundTransactions();
+                
+                // Reset deposit form
+                depositForm.reset();
+                depositDateInput.value = getTodayDateString();
+                
+                showMessage(`${member} đã nộp ${formatCurrency(amount)} vào quỹ nhóm`);
+            } else {
+                showMessage('Vui lòng nhập số tiền hợp lệ và chọn người nộp', 'error');
+            }
+        };
+        
+        const handleEditExpense = (expenseId) => {
+            const expense = expenses.find(e => e.id === expenseId);
+            if (!expense) return;
+            
+            // Set editing state
+            editingExpenseId = expenseId;
+            editExpenseIdInput.value = expenseId;
+            
+            // Update form UI
+            formTitle.textContent = 'Sửa chi tiêu';
+            saveBtnText.textContent = 'Cập nhật';
+            saveExpenseBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+            saveExpenseBtn.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+            cancelEditBtn.classList.remove('hidden');
+            
+            // Populate form data
+            expenseNameInput.value = expense.name;
+            expenseAmountInput.value = formatAmountInput(expense.amount.toString());
+            expenseDateInput.value = expense.date;
+            payerSelect.value = expense.payer;
+            
+            // Set participant checkboxes
+            participantsListDiv.querySelectorAll('.participant-checkbox').forEach(checkbox => {
+                checkbox.checked = expense.participants.includes(checkbox.value);
+            });
+            updateToggleAllButtonState();
+            
+            // Set split equally toggle
+            splitEquallyToggle.checked = expense.equalSplit;
+            
+            // Handle manual split section visibility
+            if (!expense.equalSplit) {
+                manualSplitSection.classList.remove('hidden');
+                renderManualSplitInputs();
+                
+                // Populate split amounts
+                Object.entries(expense.splits).forEach(([participant, splitAmount]) => {
+                    const input = document.getElementById(`split-amount-${participant}`);
+                    if (input) {
+                        input.value = formatAmountInput(splitAmount.toString());
+                    }
+                });
+                
+                updateManualSplitTotal();
+            } else {
+                manualSplitSection.classList.add('hidden');
+            }
+            
+            // Scroll to form
+            document.getElementById('expense-form-section').scrollIntoView({
+                behavior: 'smooth'
+            });
+        };
+        
+        const handleDeleteExpense = (expenseId) => {
+            if (confirm('Bạn có chắc chắn muốn xóa chi tiêu này?')) {
+                const index = expenses.findIndex(e => e.id === expenseId);
+                if (index !== -1) {
+                    const expense = expenses[index];
+                    
+                    // If the expense was paid by the group fund, restore the balance
+                    if (expense.payer === GROUP_FUND_PAYER_ID) {
+                        groupFundBalance += expense.amount;
+                        
+                        // Restore member balances that were deducted
+                        if (expense.equalSplit) {
+                            const splitAmount = expense.amount / expense.participants.length;
+                            expense.participants.forEach(participant => {
+                                memberBalances[participant] = (memberBalances[participant] || 0) + splitAmount;
+                            });
+                        } else {
+                            Object.entries(expense.splits).forEach(([participant, splitAmount]) => {
+                                memberBalances[participant] = (memberBalances[participant] || 0) + splitAmount;
+                            });
+                        }
+                        
+                        // Remove the corresponding fund transaction
+                        groupFundTransactions = groupFundTransactions.filter(t => 
+                            !(t.type === 'expense' && t.expenseId === expenseId));
+                    }
+                    
+                    expenses.splice(index, 1);
+                    saveDataToLocalStorage();
+                    renderExpenseList();
+                    calculateResults();
+                    showMessage('Chi tiêu đã được xóa');
+                }
+            }
+        };
+        
+        const handleClearAllData = () => {
+            if (confirm('Bạn có chắc chắn muốn xóa tất cả dữ liệu? Hành động này không thể hoàn tác.')) {
+                expenses = [];
+                groupFundTransactions = [];
+                groupFundBalance = 0;
+                
+                // Reset member balances
+                memberBalances = {};
+                members.forEach(member => {
+                    memberBalances[member] = 0;
+                });
+                
+                saveDataToLocalStorage();
+                renderExpenseList();
+                renderGroupFundStatus();
+                renderGroupFundTransactions();
+                calculateResults();
+                // Update the pie chart after clearing data
+                updateFundPieChart();
+                showMessage('Tất cả dữ liệu đã được xóa');
+            }
+        };
+
+        // --- Event Listeners ---
+        expenseForm.addEventListener('submit', handleFormSubmit);
+        depositForm.addEventListener('submit', handleDepositSubmit);
+        expenseAmountInput.addEventListener('input', (e) => { 
+            e.target.value = formatAmountInput(e.target.value);
+            if (!splitEquallyToggle.checked) {
+                updateManualSplitTotal();
+            }
+        });
+        depositAmountInput.addEventListener('input', (e) => { 
+            e.target.value = formatAmountInput(e.target.value);
+        });
+        
+        splitEquallyToggle.addEventListener('change', () => { 
+            if (splitEquallyToggle.checked) {
+                manualSplitSection.classList.add('hidden');
+            } else {
+                manualSplitSection.classList.remove('hidden');
+                renderManualSplitInputs();
+            }
+        });
+        
+        toggleAllParticipantsBtn.addEventListener('click', () => { 
+            const checkboxes = participantsListDiv.querySelectorAll('.participant-checkbox');
+            const allChecked = [...checkboxes].every(cb => cb.checked);
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = !allChecked;
+            });
+            
+            updateToggleAllButtonState();
+            renderManualSplitInputs();
+        });
+        
+        cancelEditBtn.addEventListener('click', resetForm);
+        clearAllDataBtn.addEventListener('click', handleClearAllData);
+        closeQrModalBtn.addEventListener('click', hideQrModal);
+        qrModalBackdrop.addEventListener('click', (event) => { if (event.target === qrModalBackdrop) { hideQrModal(); } });
+
+        // Tab Switching Logic
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const targetTab = button.dataset.tab; // e.g., 'expenses' or 'group-fund'
+
+                // Update button active states
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+
+                // Update content active states
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                });
+                
+                document.getElementById(`tab-content-${targetTab}`).classList.add('active');
+                
+                // Re-render fund transactions if switching to the fund tab
+                if (targetTab === 'group-fund') {
+                    renderGroupFundStatus();
+                    renderGroupFundTransactions();
+                    updateFundPieChart();
+                }
+            });
+        });
+
+
+        // --- Initialization ---
+        const initializeApp = () => {
+            // Initialize Lucide icons
+            lucide.createIcons();
+            
+            copyrightYearSpan.textContent = new Date().getFullYear();
+            loadDataFromLocalStorage();
+            populateMembers();
+            
+            // Ensure member balances are calculated for existing data
+            recalculateMemberBalances();
+            
+            saveDataToLocalStorage();
+            renderExpenseList();
+            calculateResults(); // Includes rendering fund status/log
+            renderMembersList(); // Render the members list
+            resetForm();
+            
+            // Initialize the fund pie chart
+            updateFundPieChart();
+            
+            // Initialize tabs - make sure the "expenses" tab is active by default
+            tabContents.forEach(content => content.classList.remove('active'));
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            
+            document.getElementById('tab-content-expenses').classList.add('active');
+            document.querySelector('.tab-button[data-tab="expenses"]').classList.add('active');
+        };
+
+        document.addEventListener('DOMContentLoaded', initializeApp);
+
+        const renderMemberBalances = () => {
+            const memberBalancesList = document.getElementById('member-balances-list');
+            memberBalancesList.innerHTML = '';
+            
+            // Get members sorted by balance (highest to lowest)
+            const sortedMembers = [...members].sort((a, b) => memberBalances[b] - memberBalances[a]);
+            
+            sortedMembers.forEach(member => {
+                const balance = memberBalances[member];
+                const li = document.createElement('li');
+                li.className = 'py-1 px-1 flex justify-between items-center';
+                
+                const name = document.createElement('span');
+                name.className = 'text-sm';
+                name.textContent = member;
+                
+                const balanceSpan = document.createElement('span');
+                balanceSpan.className = balance > 0 ? 'text-green-600 font-medium text-sm' : 
+                                        balance < 0 ? 'text-red-600 font-medium text-sm' : 
+                                        'text-gray-600 text-sm';
+                balanceSpan.textContent = formatCurrency(balance);
+                
+                li.appendChild(name);
+                li.appendChild(balanceSpan);
+                
+                memberBalancesList.appendChild(li);
+            });
+        };
+
+        // Function to recalculate all member balances from transactions history
+        const recalculateMemberBalances = () => {
+            // Reset all balances to 0
+            memberBalances = {};
+            members.forEach(member => {
+                memberBalances[member] = 0;
+            });
+            
+            // Add deposits to member balances
+            groupFundTransactions.forEach(transaction => {
+                if (transaction.type === 'deposit') {
+                    memberBalances[transaction.member] = (memberBalances[transaction.member] || 0) + transaction.amount;
+                }
+            });
+            
+            // Subtract expense shares from member balances
+            expenses.forEach(expense => {
+                if (expense.payer === GROUP_FUND_PAYER_ID) {
+                    if (expense.equalSplit) {
+                        const splitAmount = expense.amount / expense.participants.length;
+                        expense.participants.forEach(participant => {
+                            memberBalances[participant] = (memberBalances[participant] || 0) - splitAmount;
+                        });
+                    } else {
+                        Object.entries(expense.splits).forEach(([participant, amount]) => {
+                            memberBalances[participant] = (memberBalances[participant] || 0) - amount;
+                        });
+                    }
+                }
+            });
+            
+            saveDataToLocalStorage();
+        };
+
+        // --- Member Management Functions ---
+        const renderMembersList = () => {
+            const membersList = document.getElementById('members-list');
+            membersList.innerHTML = '';
+            
+            members.forEach(member => {
+                const memberDiv = document.createElement('div');
+                memberDiv.className = 'bg-white p-4 rounded-lg border border-gray-200 flex items-center justify-between';
+                
+                const memberInfo = document.createElement('div');
+                memberInfo.className = 'flex-1';
+                
+                const name = document.createElement('h4');
+                name.className = 'text-lg font-medium text-gray-800';
+                name.textContent = member;
+                
+                const account = document.createElement('p');
+                account.className = 'text-sm text-gray-600';
+                account.textContent = `Số tài khoản: ${bankAccounts[member] || 'Chưa có'}`;
+                
+                memberInfo.appendChild(name);
+                memberInfo.appendChild(account);
+                
+                const editButton = document.createElement('button');
+                editButton.className = 'bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-md text-sm flex items-center';
+                editButton.innerHTML = '<i data-lucide="edit" class="w-4 h-4 mr-1"></i>Sửa';
+                editButton.addEventListener('click', () => handleEditMember(member));
+                
+                memberDiv.appendChild(memberInfo);
+                memberDiv.appendChild(editButton);
+                
+                membersList.appendChild(memberDiv);
+            });
+            
+            // Initialize Lucide icons for the newly created buttons
+            lucide.createIcons();
+        };
+
+        const handleEditMember = (member) => {
+            const newAccount = prompt(`Nhập số tài khoản mới cho ${member}:`, bankAccounts[member] || '');
+            
+            if (newAccount !== null) {
+                if (newAccount.trim() === '') {
+                    showMessage('Số tài khoản không được để trống', 'error');
+                    return;
+                }
+                
+                if (!/^\d+$/.test(newAccount)) {
+                    showMessage('Số tài khoản chỉ được chứa chữ số', 'error');
+                    return;
+                }
+                
+                bankAccounts[member] = newAccount;
+                saveDataToLocalStorage();
+                renderMembersList();
+                showMessage(`Đã cập nhật số tài khoản cho ${member}`);
+            }
+        };
+
+    </script>
+</body>
+</html> 

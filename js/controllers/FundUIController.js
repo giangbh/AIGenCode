@@ -29,6 +29,10 @@ export class FundUIController extends UIController {
         // Chart
         this.fundPieChart = null;
         
+        // Pagination for fund transactions
+        this.transactionsPerPage = 6; // Show 6 transactions per page
+        this.currentTransactionPage = 1;
+        
         // Initialize UI
         this.initUI();
     }
@@ -244,9 +248,29 @@ export class FundUIController extends UIController {
             new Date(b.date) - new Date(a.date)
         );
         
-        sortedTransactions.forEach(transaction => {
+        // Pagination setup
+        const totalTransactions = sortedTransactions.length;
+        const totalPages = Math.ceil(totalTransactions / this.transactionsPerPage);
+        
+        // Ensure current page is valid
+        if (this.currentTransactionPage < 1) this.currentTransactionPage = 1;
+        if (this.currentTransactionPage > totalPages) this.currentTransactionPage = totalPages;
+        
+        // Calculate the range of transactions to display
+        const startIndex = (this.currentTransactionPage - 1) * this.transactionsPerPage;
+        const endIndex = Math.min(startIndex + this.transactionsPerPage, totalTransactions);
+        
+        // Get current page transactions
+        const currentPageTransactions = sortedTransactions.slice(startIndex, endIndex);
+        
+        // Create container for transactions
+        const transactionsList = document.createElement('div');
+        transactionsList.className = 'mb-4';
+        
+        // Render transactions for current page
+        currentPageTransactions.forEach(transaction => {
             const item = document.createElement('div');
-            item.className = 'fund-transaction-item';
+            item.className = 'fund-transaction-item mb-2 pb-2 border-b border-gray-100';
             
             const header = document.createElement('div');
             header.className = 'flex justify-between items-center';
@@ -284,14 +308,67 @@ export class FundUIController extends UIController {
             item.appendChild(header);
             item.appendChild(description);
             
-            this.groupFundTransactionsLogDiv.appendChild(item);
+            transactionsList.appendChild(item);
         });
+        
+        this.groupFundTransactionsLogDiv.appendChild(transactionsList);
+        
+        // Add pagination controls if needed
+        if (totalPages > 1) {
+            const paginationControls = document.createElement('div');
+            paginationControls.className = 'flex items-center justify-between border-t border-gray-200 pt-3';
+            
+            // Page info text
+            const pageInfo = document.createElement('div');
+            pageInfo.className = 'text-xs text-gray-500';
+            pageInfo.textContent = `Trang ${this.currentTransactionPage}/${totalPages}`;
+            
+            // Pagination buttons
+            const buttonContainer = document.createElement('div');
+            buttonContainer.className = 'flex space-x-2';
+            
+            // Previous button
+            const prevButton = document.createElement('button');
+            prevButton.type = 'button';
+            prevButton.className = 'px-2 py-1 text-xs rounded border border-gray-300 ' + 
+                                   (this.currentTransactionPage === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-50');
+            prevButton.innerHTML = '<i data-lucide="chevron-left" class="w-3 h-3"></i>';
+            prevButton.disabled = this.currentTransactionPage === 1;
+            
+            if (this.currentTransactionPage > 1) {
+                prevButton.addEventListener('click', () => {
+                    this.currentTransactionPage--;
+                    this.renderFundTransactions();
+                });
+            }
+            
+            // Next button
+            const nextButton = document.createElement('button');
+            nextButton.type = 'button';
+            nextButton.className = 'px-2 py-1 text-xs rounded border border-gray-300 ' + 
+                                   (this.currentTransactionPage === totalPages ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-50');
+            nextButton.innerHTML = '<i data-lucide="chevron-right" class="w-3 h-3"></i>';
+            nextButton.disabled = this.currentTransactionPage === totalPages;
+            
+            if (this.currentTransactionPage < totalPages) {
+                nextButton.addEventListener('click', () => {
+                    this.currentTransactionPage++;
+                    this.renderFundTransactions();
+                });
+            }
+            
+            buttonContainer.appendChild(prevButton);
+            buttonContainer.appendChild(nextButton);
+            
+            paginationControls.appendChild(pageInfo);
+            paginationControls.appendChild(buttonContainer);
+            
+            this.groupFundTransactionsLogDiv.appendChild(paginationControls);
+        }
         
         // Apply Lucide icons to any new elements
         lucide.createIcons({
-            attrs: {
-                class: 'w-4 h-4'
-            }
+            scope: this.groupFundTransactionsLogDiv
         });
     }
     

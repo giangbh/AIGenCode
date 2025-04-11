@@ -4,8 +4,9 @@
  */
 
 import { UIController } from './UIController.js';
-import { formatCurrency, formatAmountInput, parseFormattedAmount, getTodayDateString, showMessage } from '../utils/helpers.js';
+import { formatCurrency, formatAmountInput, parseFormattedAmount, getTodayDateString, showMessage, showModalMessage } from '../utils/helpers.js';
 import { isAdmin } from '../utils/auth.js';
+import { getMembersNeedingNotification, updateNotificationThreshold, markMemberNotified } from '../utils/storage.js';
 
 export class FundUIController extends UIController {
     /**
@@ -52,8 +53,58 @@ export class FundUIController extends UIController {
             e.target.value = formatAmountInput(e.target.value);
         });
         
+        // Tab switching
+        document.querySelectorAll('.tabs .tab-btn').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const tabId = e.target.getAttribute('data-tab');
+                this.switchTab(tabId);
+            });
+        });
+        
+        // Initialize notification threshold form 
+        const notificationThresholdForm = document.getElementById('notification-threshold-form');
+        if (notificationThresholdForm) {
+            notificationThresholdForm.addEventListener('submit', (e) => this.handleNotificationThresholdSubmit(e));
+            
+            // Format threshold amount input
+            const thresholdAmountInput = document.getElementById('threshold-amount-input');
+            if (thresholdAmountInput) {
+                thresholdAmountInput.addEventListener('input', (e) => {
+                    e.target.value = formatAmountInput(e.target.value);
+                });
+            }
+        }
+        
         // Populate member dropdown for deposits
         this.populateDepositMemberSelect();
+        this.populateThresholdMemberSelect();
+    }
+    
+    /**
+     * Switch between tabs
+     * @param {string} tabId - Tab ID to switch to
+     */
+    switchTab(tabId) {
+        // Hide all tab contents
+        document.querySelectorAll('.tab-pane').forEach(content => {
+            content.classList.remove('active');
+        });
+        
+        // Deactivate all tab buttons
+        document.querySelectorAll('.tab-btn').forEach(button => {
+            button.classList.remove('active');
+        });
+        
+        // Activate the selected tab button
+        document.querySelectorAll(`.tab-btn[data-tab="${tabId}"]`).forEach(button => {
+            button.classList.add('active');
+        });
+        
+        // Show the selected tab content
+        const selectedContent = document.getElementById(`${tabId}-content`);
+        if (selectedContent) {
+            selectedContent.classList.add('active');
+        }
     }
     
     /**
@@ -69,6 +120,89 @@ export class FundUIController extends UIController {
             option.textContent = member; 
             this.depositMemberSelect.appendChild(option); 
         });
+    }
+    
+    /**
+     * Populate member dropdown for threshold settings
+     */
+    populateThresholdMemberSelect() {
+        const thresholdMemberSelect = document.getElementById('threshold-member-select');
+        if (!thresholdMemberSelect) return;
+        
+        const members = this.app.memberManager.getAllMembers();
+        
+        thresholdMemberSelect.innerHTML = '<option value="" disabled selected>-- Chọn thành viên --</option>';
+        members.forEach(member => { 
+            const option = document.createElement('option'); 
+            option.value = member; 
+            option.textContent = member; 
+            thresholdMemberSelect.appendChild(option); 
+        });
+        
+        // Add change event to load current threshold
+        thresholdMemberSelect.addEventListener('change', () => {
+            this.loadMemberThreshold(thresholdMemberSelect.value);
+        });
+    }
+    
+    /**
+     * Load current threshold for member
+     * @param {string} memberName - Name of the member
+     */
+    loadMemberThreshold(memberName) {
+        if (!memberName) return;
+        
+        const thresholdAmountInput = document.getElementById('threshold-amount-input');
+        if (!thresholdAmountInput) return;
+        
+        // Get member balance from database
+        const memberBalances = this.app.fundManager.getMemberBalances();
+        const balance = memberBalances[memberName] || 0;
+        
+        // Default threshold is -50,000 or 50% of current balance if negative
+        let defaultThreshold = -50000;
+        if (balance < 0) {
+            defaultThreshold = Math.min(defaultThreshold, Math.floor(balance * 1.5));
+        }
+        
+        // Set threshold in the input
+        thresholdAmountInput.value = formatCurrency(defaultThreshold).replace('VNĐ', '').trim();
+    }
+    
+    /**
+     * Handle notification threshold form submit
+     * @param {Event} e - Submit event
+     */
+    async handleNotificationThresholdSubmit(e) {
+        e.preventDefault();
+        
+        const memberSelect = document.getElementById('threshold-member-select');
+        const thresholdInput = document.getElementById('threshold-amount-input');
+        
+        if (!memberSelect || !thresholdInput) return;
+        
+        const memberName = memberSelect.value;
+        const threshold = parseFormattedAmount(thresholdInput.value);
+        
+        if (!memberName) {
+            showMessage('Vui lòng chọn thành viên', 'error');
+            return;
+        }
+        
+        if (threshold >= 0) {
+            showMessage('Ngưỡng nhắc nhở phải là số âm', 'error');
+            return;
+        }
+        
+        try {
+            // Update threshold in database
+            await updateNotificationThreshold(memberName, threshold);
+            
+            showMessage(`Đã cập nhật ngưỡng nhắc nhở cho ${memberName}`, 'success');
+        } catch (error) {
+            console.error('Lỗi khi cập nhật ngưỡng nhắc nhở:', error);
+            showMessage(`Lỗi khi cập nhật ngưỡng nhắc nhở: ${error.message}`, 'error');
+        }
     }
     
     /**
@@ -136,6 +270,138 @@ export class FundUIController extends UIController {
             
             this.memberBalancesList.appendChild(li);
         });
+        
+        // Also render notification section
+        this.renderMemberNotifications();
+    }
+    
+    /**
+     * Render member notification panel
+     */
+    async renderMemberNotifications() {
+        const notificationContainer = document.getElementById('member-notifications');
+        if (!notificationContainer) return;
+        
+        try {
+            // Lấy danh sách thành viên cần nhắc nhở
+            const members = await getMembersNeedingNotification();
+            
+            notificationContainer.innerHTML = '';
+            
+            if (members.length === 0) {
+                notificationContainer.innerHTML = '<p class="text-gray-500 italic text-sm">Không có thành viên nào cần nhắc nhở nộp tiền</p>';
+                return;
+            }
+            
+            // Tạo card thông báo
+            const notificationCard = document.createElement('div');
+            notificationCard.className = 'bg-yellow-50 p-3 rounded-lg border border-yellow-200';
+            
+            const title = document.createElement('h4');
+            title.className = 'text-sm font-semibold text-yellow-800 mb-2 flex items-center';
+            title.innerHTML = '<i data-lucide="bell" class="w-4 h-4 mr-1"></i> Thành viên cần nộp tiền';
+            
+            const memberList = document.createElement('ul');
+            memberList.className = 'space-y-1';
+            
+            members.forEach(member => {
+                const item = document.createElement('li');
+                item.className = 'flex justify-between text-sm';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = member.member_name;
+                
+                const balanceSpan = document.createElement('span');
+                balanceSpan.className = 'text-red-600 font-medium';
+                balanceSpan.textContent = formatCurrency(member.current_balance);
+                
+                const notifyButton = document.createElement('button');
+                notifyButton.className = 'ml-2 text-xs bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-0.5 rounded';
+                notifyButton.textContent = 'Nhắc nhở';
+                notifyButton.onclick = () => this.notifyMember(member.member_name, member.current_balance);
+                
+                item.appendChild(nameSpan);
+                const actionDiv = document.createElement('div');
+                actionDiv.className = 'flex items-center';
+                actionDiv.appendChild(balanceSpan);
+                actionDiv.appendChild(notifyButton);
+                item.appendChild(actionDiv);
+                
+                memberList.appendChild(item);
+            });
+            
+            notificationCard.appendChild(title);
+            notificationCard.appendChild(memberList);
+            notificationContainer.appendChild(notificationCard);
+            
+            // Khởi tạo lại icon từ Lucide
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+        } catch (error) {
+            console.error('Lỗi khi lấy danh sách thành viên cần nhắc nhở:', error);
+            notificationContainer.innerHTML = '<p class="text-red-500 italic text-sm">Lỗi khi tải thông tin nhắc nhở</p>';
+        }
+    }
+    
+    /**
+     * Nhắc nhở thành viên nộp tiền
+     * @param {string} memberName Tên thành viên
+     * @param {number} balance Số dư hiện tại
+     */
+    notifyMember(memberName, balance) {
+        // Tạo tin nhắn nhắc nhở
+        const message = `Bạn hiện đang có số dư âm ${formatCurrency(balance)} trong quỹ nhóm CafeThu6. Vui lòng nộp tiền để cân đối số dư. Cảm ơn bạn!`;
+        
+        // Hiển thị modal xác nhận với các lựa chọn gửi tin nhắn
+        showModalMessage(
+            'Nhắc nhở nộp tiền',
+            `<p>Gửi nhắc nhở đến <strong>${memberName}</strong> với nội dung:</p>
+            <div class="my-3 p-3 bg-gray-50 rounded text-sm">${message}</div>
+            <div class="flex flex-wrap gap-2 mt-4">
+                <button id="copy-notify-btn" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-1.5 px-3 rounded">
+                    <i data-lucide="copy" class="w-4 h-4 inline-block mr-1"></i> Sao chép
+                </button>
+                <button id="sms-notify-btn" class="flex-1 bg-green-500 hover:bg-green-600 text-white py-1.5 px-3 rounded">
+                    <i data-lucide="message-square" class="w-4 h-4 inline-block mr-1"></i> SMS
+                </button>
+                <button id="email-notify-btn" class="flex-1 bg-purple-500 hover:bg-purple-600 text-white py-1.5 px-3 rounded">
+                    <i data-lucide="mail" class="w-4 h-4 inline-block mr-1"></i> Email
+                </button>
+            </div>`,
+            'Đóng'
+        );
+        
+        // Initialize Lucide icons
+        if (window.lucide) {
+            window.lucide.createIcons();
+        }
+        
+        // Xử lý sự kiện sao chép
+        document.getElementById('copy-notify-btn').onclick = () => {
+            navigator.clipboard.writeText(message);
+            showMessage('Đã sao chép tin nhắn nhắc nhở!', 'success');
+        };
+        
+        // Xử lý sự kiện gửi SMS
+        document.getElementById('sms-notify-btn').onclick = () => {
+            window.open(`sms:?body=${encodeURIComponent(message)}`);
+        };
+        
+        // Xử lý sự kiện gửi Email
+        document.getElementById('email-notify-btn').onclick = () => {
+            window.open(`mailto:?subject=Nhắc nhở nộp tiền quỹ CafeThu6&body=${encodeURIComponent(message)}`);
+        };
+        
+        // Cập nhật thời gian thông báo
+        markMemberNotified(memberName)
+            .then(() => {
+                console.log(`Đã cập nhật thời gian nhắc nhở cho ${memberName}`);
+                setTimeout(() => this.renderMemberNotifications(), 1000);
+            })
+            .catch(error => {
+                console.error(`Lỗi khi cập nhật thời gian nhắc nhở cho ${memberName}:`, error);
+            });
     }
     
     /**

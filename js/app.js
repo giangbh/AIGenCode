@@ -44,6 +44,7 @@ class App {
             // Initialize managers
             this.memberManager = new MemberManager(this.defaultMembers, this.defaultBankAccounts);
             this.fundManager = new GroupFundManager();
+            this.fundManager.setApp(this);
             this.expenseManager = new ExpenseManager(this.fundManager);
             
             // Wait for managers to load data

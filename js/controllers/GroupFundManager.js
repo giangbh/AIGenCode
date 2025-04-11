@@ -4,7 +4,7 @@
  */
 
 import { FundTransaction } from '../models/FundTransaction.js';
-import { loadFundTransactions, invalidateCache, supabase } from '../utils/storage.js';
+import { loadFundTransactions, invalidateCache, supabase, getCurrentBalance, updateFundBalance, recalculateBalance, getMemberBalance, updateMemberBalance } from '../utils/storage.js';
 
 export class GroupFundManager {
     /**
@@ -14,9 +14,18 @@ export class GroupFundManager {
         this.balance = 0;
         this.transactions = [];
         this.memberBalances = {};
+        this.app = null;
         
         // Load data
         this.loadData();
+    }
+    
+    /**
+     * Set app reference 
+     * @param {App} app - The main application instance
+     */
+    setApp(app) {
+        this.app = app;
     }
     
     /**
@@ -24,22 +33,47 @@ export class GroupFundManager {
      */
     async loadData() {
         try {
-            // Load transactions from Supabase
+            // Lấy số dư quỹ hiện tại từ bảng fund_balance
+            const fundBalance = await getCurrentBalance();
+            this.balance = fundBalance;
+            
+            // Vẫn tải transactions để hiển thị lịch sử và tính số dư thành viên
             const transactionsData = await loadFundTransactions();
             this.transactions = transactionsData.map(t => FundTransaction.fromObject(t));
             
-            // Calculate balance from transactions
-            this.balance = this.transactions.reduce((sum, transaction) => {
-                return sum + (transaction.isDeposit() ? transaction.amount : -transaction.amount);
-            }, 0);
+            // Lấy danh sách thành viên nếu app đã được khởi tạo
+            let members = [];
+            if (this.app && this.app.memberManager) {
+                members = this.app.memberManager.getAllMembers();
+            }
             
-            // Calculate member balances from transactions
-            this.recalculateMemberBalances();
+            // Tải số dư của từng thành viên
+            await this.loadMemberBalances(members);
         } catch (error) {
             console.error('Lỗi khi tải dữ liệu quỹ:', error);
             this.balance = 0;
             this.transactions = [];
             this.memberBalances = {};
+        }
+    }
+    
+    /**
+     * Tải số dư thành viên từ database
+     * @param {Array<string>} members - Danh sách thành viên
+     */
+    async loadMemberBalances(members = []) {
+        try {
+            // Khởi tạo đối tượng memberBalances
+            this.memberBalances = {};
+            
+            // Tải số dư của từng thành viên từ bảng member_balances
+            await Promise.all(members.map(async (member) => {
+                this.memberBalances[member] = await getMemberBalance(member);
+            }));
+        } catch (error) {
+            console.error('Lỗi khi tải số dư thành viên:', error);
+            // Dùng phương pháp tính từ giao dịch nếu gặp lỗi
+            this.recalculateMemberBalances(members);
         }
     }
     
@@ -97,8 +131,6 @@ export class GroupFundManager {
                 this.memberBalances[member] = 0;
             }
         });
-        
-        // No need to save, as balances are calculated from transactions now
     }
     
     /**
@@ -120,8 +152,14 @@ export class GroupFundManager {
             // Update local balance
             this.balance += amount;
             
-            // Update member balance
+            // Cập nhật số dư quỹ trong database
+            await updateFundBalance(this.balance, transaction.id);
+            
+            // Update member balance locally
             this.memberBalances[member] = (this.memberBalances[member] || 0) + amount;
+            
+            // Cập nhật số dư thành viên trong database
+            await updateMemberBalance(member, this.memberBalances[member], transaction.id);
             
             // Add to local transactions
             this.transactions.push(transaction);
@@ -167,7 +205,7 @@ export class GroupFundManager {
             // Update the transaction with Supabase ID
             transaction.id = savedTransaction.id;
             
-            // Update fund balance
+            // Update fund balance locally
             if (transaction.isDeposit()) {
                 this.balance += transaction.amount;
                 
@@ -180,10 +218,18 @@ export class GroupFundManager {
                 this.balance -= transaction.amount;
             }
             
-            // Apply member balance changes
+            // Cập nhật số dư quỹ trong database
+            await updateFundBalance(this.balance, transaction.id);
+            
+            // Apply member balance changes locally
             Object.entries(memberBalanceChanges).forEach(([member, change]) => {
                 this.memberBalances[member] = (this.memberBalances[member] || 0) + change;
             });
+            
+            // Cập nhật số dư thành viên trong database
+            await Promise.all(Object.entries(memberBalanceChanges).map(async ([member, change]) => {
+                await updateMemberBalance(member, this.memberBalances[member], transaction.id);
+            }));
             
             // Add to transactions
             this.transactions.push(transaction);
@@ -217,13 +263,21 @@ export class GroupFundManager {
             // Delete the transaction from Supabase
             await supabase.deleteExpenseTransactions(expenseId);
             
-            // Update fund balance
+            // Update fund balance locally
             this.balance += transaction.amount;
             
-            // Apply member balance changes
+            // Cập nhật số dư quỹ trong database
+            await updateFundBalance(this.balance, null);
+            
+            // Apply member balance changes locally
             Object.entries(memberBalanceChanges).forEach(([member, change]) => {
                 this.memberBalances[member] = (this.memberBalances[member] || 0) + change;
             });
+            
+            // Cập nhật số dư thành viên trong database
+            await Promise.all(Object.entries(memberBalanceChanges).map(async ([member, change]) => {
+                await updateMemberBalance(member, this.memberBalances[member], null);
+            }));
             
             // Remove the transaction
             this.transactions.splice(index, 1);
@@ -290,6 +344,82 @@ export class GroupFundManager {
                 }
             }
         });
+    }
+    
+    /**
+     * Đồng bộ số dư từ database (chạy định kỳ hoặc khi phát hiện khác biệt)
+     */
+    async synchronizeBalance() {
+        try {
+            // Lấy số dư từ database
+            const databaseBalance = await getCurrentBalance();
+            
+            // So sánh với số dư cục bộ
+            if (databaseBalance !== this.balance) {
+                console.log(`Phát hiện khác biệt số dư: Cục bộ=${this.balance}, Database=${databaseBalance}`);
+                
+                // Cập nhật số dư cục bộ
+                this.balance = databaseBalance;
+                
+                // Cập nhật UI nếu app đã được khởi tạo
+                if (this.app && this.app.fundUIController) {
+                    this.app.fundUIController.renderFundStatus();
+                    this.app.fundUIController.updateAllFundBalanceDisplays();
+                }
+            }
+        } catch (error) {
+            console.error('Lỗi khi đồng bộ số dư:', error);
+        }
+    }
+    
+    /**
+     * Tính toán lại số dư quỹ và đồng bộ với database (chỉ dùng khi cần)
+     */
+    async forceRecalculateBalance() {
+        try {
+            // Sử dụng hàm tính toán lại từ database
+            const recalculatedBalance = await recalculateBalance();
+            
+            // Cập nhật số dư cục bộ
+            this.balance = recalculatedBalance;
+            
+            // Cập nhật UI nếu app đã được khởi tạo
+            if (this.app && this.app.fundUIController) {
+                this.app.fundUIController.renderFundStatus();
+                this.app.fundUIController.updateAllFundBalanceDisplays();
+            }
+            
+            console.log(`Đã tính lại số dư quỹ: ${this.balance}`);
+            return this.balance;
+        } catch (error) {
+            console.error('Lỗi khi tính lại số dư quỹ:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Tải giao dịch quỹ theo trang
+     * @param {number} page Số trang
+     * @param {number} pageSize Số lượng giao dịch mỗi trang
+     * @returns {Promise<Array>} Danh sách giao dịch
+     */
+    async loadTransactionsByPage(page = 1, pageSize = 20) {
+        try {
+            const { data, error } = await supabase.from('fund_transactions')
+                .select('*')
+                .order('date', { ascending: false })
+                .range((page - 1) * pageSize, page * pageSize - 1);
+            
+            if (error) {
+                console.error('Lỗi khi tải giao dịch quỹ theo trang:', error);
+                return [];
+            }
+            
+            return data.map(t => FundTransaction.fromObject(t));
+        } catch (error) {
+            console.error('Lỗi khi tải giao dịch quỹ theo trang:', error);
+            return [];
+        }
     }
     
     /**

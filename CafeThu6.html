@@ -198,14 +198,14 @@
                     </div>
                     
                     <!-- Fund Management Grid -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        <!-- Left Side: Nộp tiền vào quỹ -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Left Side: Nộp quỹ -->
                         <div>
-                            <h4 class="text-md font-semibold mb-2 text-gray-700 flex items-center">
-                                <i data-lucide="coins" class="w-4 h-4 mr-1 text-sky-500"></i>
-                                Nộp tiền vào quỹ
-                            </h4>
-                            <form id="deposit-form" class="space-y-3 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                            <h3 class="text-md font-semibold mb-2 text-gray-700 flex items-center">
+                                <i data-lucide="plus-circle" class="w-4 h-4 mr-1 text-sky-500"></i>
+                                Nộp quỹ nhóm
+                            </h3>
+                            <form id="deposit-form" class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm space-y-3">
                                 <div>
                                     <label for="deposit-member" class="block text-sm font-medium text-gray-700 mb-1">Thành viên</label>
                                     <select id="deposit-member" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500">
@@ -238,22 +238,71 @@
                         
                         <!-- Right Side: Thông tin quỹ -->
                         <div>
-                            <h3 class="text-md font-semibold mb-2 text-gray-700 flex items-center">
-                                <i data-lucide="info" class="w-4 h-4 mr-1 text-sky-500"></i>
-                                Thông tin quỹ
-                            </h3>
-                            <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
-                                <p class="mb-4">Số dư hiện tại: <strong id="group-fund-balance-info" class="text-xl text-sky-600">0 VNĐ</strong></p>
-                                
-                                <!-- Member Fund Balances -->
-                                <h4 class="text-md font-semibold mb-2 text-gray-700 flex items-center">
-                                    <i data-lucide="wallet" class="w-4 h-4 mr-1 text-sky-500"></i>
-                                    Số dư thành viên
-                                </h4>
-                                <div class="bg-white p-3 rounded border border-gray-200 max-h-72 overflow-y-auto shadow-sm">
-                                    <ul id="member-balances-list" class="divide-y divide-gray-100">
-                                        <!-- Member balances will be populated here -->
-                                    </ul>
+                            <div class="tabs mb-4">
+                                <button class="tab-btn active" data-tab="fund-info">Thông tin quỹ</button>
+                                <button class="tab-btn" data-tab="notification-settings">Cài đặt nhắc nhở</button>
+                            </div>
+                            
+                            <div id="fund-info-content" class="tab-pane active">
+                                <h3 class="text-md font-semibold mb-2 text-gray-700 flex items-center">
+                                    <i data-lucide="info" class="w-4 h-4 mr-1 text-sky-500"></i>
+                                    Thông tin quỹ
+                                </h3>
+                                <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                                    <p class="mb-4">Số dư hiện tại: <strong id="group-fund-balance-info" class="text-xl text-sky-600">0 VNĐ</strong></p>
+                                    
+                                    <!-- Notification Section -->
+                                    <div class="mb-4">
+                                        <h4 class="text-md font-semibold mb-2 text-gray-700 flex items-center">
+                                            <i data-lucide="bell" class="w-4 h-4 mr-1 text-yellow-500"></i>
+                                            Nhắc nhở nộp tiền
+                                        </h4>
+                                        <div id="member-notifications">
+                                            <!-- Notifications will be populated here -->
+                                            <p class="text-gray-500 italic text-sm">Đang tải thông tin...</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Member Fund Balances -->
+                                    <h4 class="text-md font-semibold mb-2 text-gray-700 flex items-center">
+                                        <i data-lucide="wallet" class="w-4 h-4 mr-1 text-sky-500"></i>
+                                        Số dư thành viên
+                                    </h4>
+                                    <div class="bg-white p-3 rounded border border-gray-200 max-h-72 overflow-y-auto shadow-sm">
+                                        <ul id="member-balances-list" class="divide-y divide-gray-100">
+                                            <!-- Member balances will be populated here -->
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div id="notification-settings-content" class="tab-pane">
+                                <h3 class="text-md font-semibold mb-2 text-gray-700 flex items-center">
+                                    <i data-lucide="bell" class="w-4 h-4 mr-1 text-yellow-500"></i>
+                                    Cài đặt nhắc nhở
+                                </h3>
+                                <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                                    <p class="text-sm text-gray-600 mb-4">Thiết lập ngưỡng để tự động nhắc nhở khi số dư thành viên giảm xuống dưới mức quy định.</p>
+                                    
+                                    <form id="notification-threshold-form" class="space-y-4">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Thành viên:</label>
+                                            <select id="threshold-member-select" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                                                <!-- Options will be populated dynamically -->
+                                            </select>
+                                        </div>
+                                        
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Ngưỡng nhắc nhở (VNĐ):</label>
+                                            <input type="text" id="threshold-amount-input" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="-50,000">
+                                            <p class="text-xs text-gray-500 mt-1">Nhập số âm, ví dụ: -50,000 để nhắc nhở khi số dư dưới -50,000đ</p>
+                                        </div>
+                                        
+                                        <button type="submit" class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md">
+                                            <i data-lucide="save" class="w-4 h-4 mr-1 inline"></i>
+                                            Lưu thiết lập
+                                        </button>
+                                    </form>
                                 </div>
                             </div>
                         </div>

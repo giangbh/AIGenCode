@@ -392,6 +392,301 @@ export async function initializeDefaultData(defaultMembers, defaultBankAccounts)
     }
 }
 
+/**
+ * Lấy số dư quỹ hiện tại từ bảng fund_balance
+ * @returns {Promise<number>} Số dư quỹ hiện tại
+ */
+export async function getCurrentBalance() {
+    const { data, error } = await supabase
+        .from('fund_balance')
+        .select('current_balance')
+        .order('last_updated', { ascending: false })
+        .limit(1)
+        .single();
+    
+    if (error) {
+        console.error('Lỗi khi lấy số dư quỹ:', error);
+        
+        // Nếu chưa có bảng hoặc dữ liệu, tính toán lại
+        try {
+            return await recalculateBalance();
+        } catch (recalcError) {
+            console.error('Lỗi khi tính lại số dư quỹ:', recalcError);
+            return 0;
+        }
+    }
+    
+    return data.current_balance;
+}
+
+/**
+ * Cập nhật số dư quỹ
+ * @param {number} newBalance Số dư mới
+ * @param {string} transactionId ID của giao dịch gần nhất
+ * @returns {Promise<Object>} Kết quả cập nhật
+ */
+export async function updateFundBalance(newBalance, transactionId) {
+    // Kiểm tra xem đã có dữ liệu trong bảng fund_balance chưa
+    const { count } = await supabase
+        .from('fund_balance')
+        .select('*', { count: 'exact', head: true });
+    
+    if (count === 0) {
+        // Chưa có dữ liệu, thêm mới
+        const { data, error } = await supabase
+            .from('fund_balance')
+            .insert({
+                current_balance: newBalance,
+                last_transaction_id: transactionId,
+                last_updated: new Date().toISOString(),
+                version: 1
+            })
+            .select();
+        
+        if (error) {
+            console.error('Lỗi khi tạo số dư quỹ:', error);
+            throw new Error(`Không thể tạo số dư quỹ: ${error.message}`);
+        }
+        
+        return data[0];
+    } else {
+        // Đã có dữ liệu, cập nhật
+        const { data, error } = await supabase
+            .from('fund_balance')
+            .update({
+                current_balance: newBalance,
+                last_transaction_id: transactionId,
+                last_updated: new Date().toISOString(),
+                version: supabase.rpc('increment_version', { row_id: 1 })
+            })
+            .eq('id', 1)
+            .select();
+        
+        if (error) {
+            console.error('Lỗi khi cập nhật số dư quỹ:', error);
+            throw new Error(`Không thể cập nhật số dư quỹ: ${error.message}`);
+        }
+        
+        return data[0];
+    }
+}
+
+/**
+ * Tính lại số dư quỹ từ tất cả giao dịch (chỉ dùng khi cần đồng bộ lại)
+ * @returns {Promise<number>} Số dư quỹ đã tính lại
+ */
+export async function recalculateBalance() {
+    // Sử dụng Supabase để tính tổng ngay trên database
+    try {
+        const { data, error } = await supabase.rpc('calculate_fund_balance');
+        
+        if (error) {
+            console.error('Lỗi khi tính lại số dư quỹ (RPC):', error);
+            
+            // Nếu RPC lỗi, tính thủ công
+            const { data: transactions, error: transactionError } = await supabase
+                .from('fund_transactions')
+                .select('type, amount');
+                
+            if (transactionError) {
+                console.error('Lỗi khi lấy giao dịch:', transactionError);
+                return 0;
+            }
+            
+            const balance = transactions.reduce((sum, transaction) => {
+                return sum + (transaction.type === 'deposit' ? transaction.amount : -transaction.amount);
+            }, 0);
+            
+            // Cập nhật số dư vào bảng fund_balance
+            await updateFundBalance(balance, null);
+            
+            return balance;
+        }
+        
+        // Cập nhật số dư vào bảng fund_balance
+        await supabase
+            .from('fund_balance')
+            .update({
+                current_balance: data,
+                last_updated: new Date().toISOString()
+            })
+            .eq('id', 1);
+        
+        return data;
+    } catch (error) {
+        console.error('Lỗi khi tính lại số dư quỹ:', error);
+        return 0;
+    }
+}
+
+/**
+ * Lấy số dư hiện tại của một thành viên
+ * @param {string} memberName Tên thành viên
+ * @returns {Promise<number>} Số dư thành viên
+ */
+export async function getMemberBalance(memberName) {
+    // Đầu tiên, kiểm tra trong bảng member_balances
+    const { data, error } = await supabase
+        .from('member_balances')
+        .select('current_balance')
+        .eq('member_name', memberName)
+        .single();
+    
+    if (error || !data) {
+        console.log(`Chưa có dữ liệu số dư cho thành viên ${memberName}, sẽ tính toán lại`);
+        return calculateAndUpdateMemberBalance(memberName);
+    }
+    
+    return data.current_balance;
+}
+
+/**
+ * Tính toán và cập nhật số dư của một thành viên
+ * @param {string} memberName Tên thành viên
+ * @returns {Promise<number>} Số dư mới
+ */
+export async function calculateAndUpdateMemberBalance(memberName) {
+    try {
+        // Sử dụng RPC để tính số dư từ server
+        const { data, error } = await supabase.rpc('calculate_member_balance', {
+            member_name: memberName
+        });
+        
+        if (error) {
+            console.error(`Lỗi khi tính số dư cho ${memberName} (RPC):`, error);
+            
+            // Nếu RPC lỗi, tính thủ công
+            const { data: deposits, error: depositError } = await supabase
+                .from('fund_transactions')
+                .select('amount')
+                .eq('type', 'deposit')
+                .eq('member', memberName);
+                
+            if (depositError) {
+                console.error('Lỗi khi lấy giao dịch nộp tiền:', depositError);
+                return 0;
+            }
+            
+            const balance = deposits.reduce((sum, deposit) => sum + deposit.amount, 0);
+            
+            // Cập nhật vào bảng member_balances
+            await updateMemberBalance(memberName, balance, null);
+            
+            return balance;
+        }
+        
+        // Cập nhật vào bảng member_balances
+        await updateMemberBalance(memberName, data, null);
+        
+        return data;
+    } catch (error) {
+        console.error(`Lỗi khi tính số dư cho ${memberName}:`, error);
+        return 0;
+    }
+}
+
+/**
+ * Cập nhật số dư của thành viên
+ * @param {string} memberName Tên thành viên
+ * @param {number} newBalance Số dư mới
+ * @param {string} transactionId ID giao dịch gần nhất
+ * @returns {Promise<Object>} Kết quả cập nhật
+ */
+export async function updateMemberBalance(memberName, newBalance, transactionId) {
+    const { data, error } = await supabase
+        .from('member_balances')
+        .upsert({
+            member_name: memberName,
+            current_balance: newBalance,
+            last_transaction_id: transactionId,
+            last_updated: new Date().toISOString()
+        }, {
+            onConflict: 'member_name'
+        })
+        .select();
+    
+    if (error) {
+        console.error(`Lỗi khi cập nhật số dư của ${memberName}:`, error);
+        throw error;
+    }
+    
+    return data;
+}
+
+/**
+ * Lấy danh sách các thành viên có số dư âm cần nhắc nhở
+ * @returns {Promise<Array>} Danh sách thành viên cần nhắc nhở
+ */
+export async function getMembersNeedingNotification() {
+    const { data, error } = await supabase
+        .from('member_balances')
+        .select('member_name, current_balance, notification_threshold, notified_at')
+        .lt('current_balance', 0)
+        .order('current_balance', { ascending: true });
+    
+    if (error) {
+        console.error('Lỗi khi lấy danh sách thành viên cần nhắc nhở:', error);
+        return [];
+    }
+    
+    // Lọc thành viên có số dư dưới ngưỡng và chưa được nhắc nhở trong 7 ngày qua
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
+    return data.filter(member => {
+        return member.current_balance <= member.notification_threshold && 
+               (!member.notified_at || new Date(member.notified_at) < sevenDaysAgo);
+    });
+}
+
+/**
+ * Cập nhật ngưỡng thông báo cho thành viên
+ * @param {string} memberName Tên thành viên
+ * @param {number} threshold Ngưỡng thông báo mới
+ * @returns {Promise<Object>} Kết quả cập nhật
+ */
+export async function updateNotificationThreshold(memberName, threshold) {
+    const { data, error } = await supabase
+        .from('member_balances')
+        .upsert({
+            member_name: memberName,
+            notification_threshold: threshold,
+            last_updated: new Date().toISOString()
+        }, {
+            onConflict: 'member_name'
+        })
+        .select();
+    
+    if (error) {
+        console.error(`Lỗi khi cập nhật ngưỡng thông báo cho ${memberName}:`, error);
+        throw error;
+    }
+    
+    return data;
+}
+
+/**
+ * Đánh dấu đã thông báo cho thành viên
+ * @param {string} memberName Tên thành viên
+ * @returns {Promise<Object>} Kết quả cập nhật
+ */
+export async function markMemberNotified(memberName) {
+    const { data, error } = await supabase
+        .from('member_balances')
+        .update({ 
+            notified_at: new Date().toISOString() 
+        })
+        .eq('member_name', memberName)
+        .select();
+    
+    if (error) {
+        console.error(`Lỗi khi cập nhật thời gian thông báo cho ${memberName}:`, error);
+        throw error;
+    }
+    
+    return data;
+}
+
 export default {
     getMembers,
     addMember,
@@ -406,5 +701,14 @@ export default {
     addExpenseTransaction,
     deleteFundTransaction,
     deleteExpenseTransactions,
-    initializeDefaultData
+    initializeDefaultData,
+    getCurrentBalance,
+    updateFundBalance,
+    recalculateBalance,
+    getMemberBalance,
+    calculateAndUpdateMemberBalance,
+    updateMemberBalance,
+    getMembersNeedingNotification,
+    updateNotificationThreshold,
+    markMemberNotified
 }; 

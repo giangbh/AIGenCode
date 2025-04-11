@@ -42,34 +42,34 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 .fund-transaction-item { border-bottom: 1px dashed #cbd5e1; padding-bottom: 0.5rem; margin-bottom: 0.5rem; }
 .fund-transaction-item:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
 /* Tab Styles */
-.tab-button {
-    padding: 0.5rem 1rem;
+.tabs {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 0.5rem;
+}
+.tab-btn {
+    padding: 0.35rem 0.75rem;
     font-size: 0.875rem;
-    font-weight: 500; 
-    color: #4b5563;
-    border-bottom: 2px solid transparent;
-    transition: all 150ms ease-in-out;
+    border-radius: 0.25rem;
+    background-color: #f3f4f6;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.2s;
 }
-.tab-button:hover {
-    color: #1f2937;
-    border-bottom-color: #d1d5db;
+.tab-btn:hover {
+    background-color: #e5e7eb;
 }
-.tab-button:focus {
-    outline: none;
+.tab-btn.active {
+    background-color: #3b82f6;
+    color: white;
 }
-.tab-button.active {
-    color: #16a34a;
-    border-bottom-color: #22c55e;
-    font-weight: 600;
+.tab-pane {
+    display: none;
 }
-.tab-content {
-    display: none; /* Hidden by default */
-    margin-top: 1.5rem;
+.tab-pane.active {
+    display: block;
 }
-.tab-content.active {
-    display: block; /* Shown when active */
-}
-
 /* Login Modal Styles */
 #login-modal-backdrop {
     position: fixed;
@@ -81,23 +81,18 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
     z-index: 1100;
     transition: opacity 0.3s ease;
 }
-
 #login-modal-backdrop.hidden {
     display: none;
 }
-
 #login-error {
     transition: all 0.3s ease;
 }
-
 #login-button {
     position: relative;
 }
-
 #login-button .animate-spin {
     animation: spin 1s linear infinite;
 }
-
 @keyframes spin {
     from {
         transform: rotate(0deg);
@@ -106,19 +101,16 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
         transform: rotate(360deg);
     }
 }
-
 /* User Display Styles */
 #current-user-display {
     position: relative;
     display: inline-flex;
     align-items: center;
 }
-
 #logout-button {
     transition: all 0.2s ease;
     opacity: 0.7;
 }
-
 #logout-button:hover {
     opacity: 1;
     transform: scale(1.1);

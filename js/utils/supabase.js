@@ -99,7 +99,7 @@ export async function getExpenses() {
     const { data, error } = await supabase
         .from('expenses')
         .select('*')
-        .order('date', { ascending: false });
+        .order('created_at', { ascending: false });
     
     if (error) {
         console.error('Lỗi khi lấy danh sách chi tiêu:', error);

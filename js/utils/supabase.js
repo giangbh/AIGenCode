@@ -10,6 +10,9 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // Khởi tạo Supabase client
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Export supabase client for use in other modules
+export { supabase };
+
 /**
  * Lấy tất cả thành viên từ Supabase
  * @returns {Promise<Array>} Danh sách thành viên

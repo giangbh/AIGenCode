@@ -100,51 +100,61 @@ export class ExpenseUIController extends UIController {
         const members = this.app.memberManager.getAllMembers();
         const GROUP_FUND_PAYER_ID = this.app.expenseManager.GROUP_FUND_PAYER_ID;
         
-        // Payer dropdown
-        this.payerSelect.innerHTML = '<option value="" disabled>-- Chọn người trả --</option>';
+        // Populate payer dropdown
+        const payerSelect = document.getElementById('payer');
+        payerSelect.innerHTML = '<option value="" disabled>-- Chọn người trả --</option>';
+        
+        // Add Quỹ nhóm option first
         const groupFundOption = document.createElement('option');
         groupFundOption.value = GROUP_FUND_PAYER_ID; 
         groupFundOption.textContent = 'Quỹ nhóm';
         groupFundOption.classList.add('font-semibold', 'text-sky-700'); 
         groupFundOption.selected = true; // Set as default selected option
-        this.payerSelect.appendChild(groupFundOption);
+        payerSelect.appendChild(groupFundOption);
         
-        members.forEach(member => { 
-            const option = document.createElement('option'); 
-            option.value = member; 
-            option.textContent = member; 
-            this.payerSelect.appendChild(option); 
+        // Get current logged in user
+        const currentUser = this.app.getCurrentUser();
+        
+        members.forEach(member => {
+            const option = document.createElement('option');
+            option.value = member;
+            option.textContent = member;
+            payerSelect.appendChild(option);
         });
-
-        // Participant checkboxes
-        this.participantsListDiv.innerHTML = '';
-        members.forEach(member => { 
+        
+        // Populate participants checklist
+        const participantsList = document.getElementById('participants-list');
+        participantsList.innerHTML = '';
+        
+        members.forEach(member => {
             const div = document.createElement('div');
             div.className = 'flex items-center';
             
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
+            checkbox.id = `participant-${member}`;
             checkbox.name = 'participants';
             checkbox.value = member;
-            checkbox.id = `participant-${member}`;
-            checkbox.className = 'participant-checkbox w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500';
-            checkbox.checked = true;
+            checkbox.checked = true; // Default to checked
+            checkbox.className = 'w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2';
             
             const label = document.createElement('label');
             label.htmlFor = `participant-${member}`;
-            label.className = 'ml-2 block text-gray-700';
+            label.className = 'ml-2 text-sm font-medium text-gray-700';
             label.textContent = member;
             
             div.appendChild(checkbox);
             div.appendChild(label);
-            this.participantsListDiv.appendChild(div);
+            participantsList.appendChild(div);
         });
         
-        this.participantsListDiv.querySelectorAll('.participant-checkbox').forEach(checkbox => { 
-            checkbox.addEventListener('change', () => this.handleParticipantChange()); 
-        });
-        
-        this.updateToggleAllButtonState();
+        // Check if toggle all button exists and setup
+        const toggleAllBtn = document.getElementById('toggle-all-participants-btn');
+        if (toggleAllBtn) {
+            toggleAllBtn.classList.remove('select-all');
+            toggleAllBtn.classList.add('clear-all');
+            toggleAllBtn.textContent = 'Bỏ chọn tất cả';
+        }
     }
     
     /**

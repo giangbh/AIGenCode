@@ -11,6 +11,7 @@ import { FundUIController } from './controllers/FundUIController.js';
 import { MemberUIController } from './controllers/MemberUIController.js';
 import { initializeStorage, clearAllData, supabase } from './utils/storage.js';
 import { showMessage } from './utils/helpers.js';
+import { initAuth, isLoggedIn, getLoggedInUser } from './utils/auth.js';
 
 class App {
     /**
@@ -68,6 +69,9 @@ class App {
             
             // Thiết lập nút làm mới dữ liệu
             this.setupRefreshButton();
+            
+            // Initialize authentication system
+            initAuth();
             
             // Render all components
             await this.renderAll();
@@ -295,6 +299,22 @@ class App {
                 });
             });
         }
+    }
+
+    /**
+     * Get the currently logged in user
+     * @returns {string|null} Username of logged in user or null if not logged in
+     */
+    getCurrentUser() {
+        return getLoggedInUser();
+    }
+    
+    /**
+     * Check if a user is logged in
+     * @returns {boolean} True if user is logged in
+     */
+    isUserLoggedIn() {
+        return isLoggedIn();
     }
 }
 

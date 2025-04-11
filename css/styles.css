@@ -68,4 +68,58 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 }
 .tab-content.active {
     display: block; /* Shown when active */
+}
+
+/* Login Modal Styles */
+#login-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    transition: opacity 0.3s ease;
+}
+
+#login-modal-backdrop.hidden {
+    display: none;
+}
+
+#login-error {
+    transition: all 0.3s ease;
+}
+
+#login-button {
+    position: relative;
+}
+
+#login-button .animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* User Display Styles */
+#current-user-display {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+#logout-button {
+    transition: all 0.2s ease;
+    opacity: 0.7;
+}
+
+#logout-button:hover {
+    opacity: 1;
+    transform: scale(1.1);
 } 

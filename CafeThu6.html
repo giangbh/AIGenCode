@@ -197,32 +197,10 @@
                         <p class="text-3xl font-bold" id="group-fund-balance-card">0 VNĐ</p>
                     </div>
                     
-                    <!-- Fund Pie Chart -->
-                    <div class="mb-6">
-                        <h3 class="text-lg font-semibold mb-3 text-gray-700">Biểu đồ Quỹ</h3>
-                        <div class="bg-white p-3 rounded shadow-sm">
-                            <canvas id="fund-pie-chart" width="400" height="200"></canvas>
-                        </div>
-                    </div>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Fund Management Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <!-- Left Side: Nộp tiền vào quỹ -->
                         <div>
-                            <h3 class="text-lg font-semibold mb-2 text-gray-700">Thông tin quỹ</h3>
-                            <p class="mb-4">Số dư hiện tại: <strong id="group-fund-balance-info" class="text-xl text-sky-600">0 VNĐ</strong></p>
-
-                            <!-- Member Fund Balances -->
-                            <div class="mb-4">
-                                <h4 class="text-md font-semibold mb-2 text-gray-700 flex items-center">
-                                    <i data-lucide="wallet" class="w-4 h-4 mr-1 text-sky-500"></i>
-                                    Số dư thành viên
-                                </h4>
-                                <div class="bg-white p-3 rounded border border-gray-200 max-h-72 overflow-y-auto shadow-sm">
-                                    <ul id="member-balances-list" class="divide-y divide-gray-100">
-                                        <!-- Member balances will be populated here -->
-                                    </ul>
-                                </div>
-                            </div>
-
                             <h4 class="text-md font-semibold mb-2 text-gray-700 flex items-center">
                                 <i data-lucide="coins" class="w-4 h-4 mr-1 text-sky-500"></i>
                                 Nộp tiền vào quỹ
@@ -257,11 +235,49 @@
                                 </div>
                             </form>
                         </div>
+                        
+                        <!-- Right Side: Thông tin quỹ -->
                         <div>
-                            <h3 class="text-lg font-semibold mb-2 text-gray-700">Lịch sử giao dịch quỹ</h3>
-                            <div id="group-fund-transactions-log" class="max-h-96 overflow-y-auto bg-white p-3 rounded border border-gray-200 text-sm">
-                                <p id="no-fund-transactions-message" class="text-gray-500 italic">Chưa có giao dịch quỹ nào.</p>
+                            <h3 class="text-md font-semibold mb-2 text-gray-700 flex items-center">
+                                <i data-lucide="info" class="w-4 h-4 mr-1 text-sky-500"></i>
+                                Thông tin quỹ
+                            </h3>
+                            <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                                <p class="mb-4">Số dư hiện tại: <strong id="group-fund-balance-info" class="text-xl text-sky-600">0 VNĐ</strong></p>
+                                
+                                <!-- Member Fund Balances -->
+                                <h4 class="text-md font-semibold mb-2 text-gray-700 flex items-center">
+                                    <i data-lucide="wallet" class="w-4 h-4 mr-1 text-sky-500"></i>
+                                    Số dư thành viên
+                                </h4>
+                                <div class="bg-white p-3 rounded border border-gray-200 max-h-72 overflow-y-auto shadow-sm">
+                                    <ul id="member-balances-list" class="divide-y divide-gray-100">
+                                        <!-- Member balances will be populated here -->
+                                    </ul>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Fund Pie Chart -->
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                            <i data-lucide="pie-chart" class="w-4 h-4 mr-1 text-sky-500"></i>
+                            Biểu đồ Quỹ
+                        </h3>
+                        <div class="bg-white p-3 rounded shadow-sm border border-gray-200">
+                            <canvas id="fund-pie-chart" width="400" height="200"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Fund Transaction History (moved to bottom) -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                            <i data-lucide="history" class="w-4 h-4 mr-1 text-sky-500"></i>
+                            Lịch sử giao dịch quỹ
+                        </h3>
+                        <div id="group-fund-transactions-log" class="max-h-96 overflow-y-auto bg-white p-3 rounded border border-gray-200 text-sm">
+                            <p id="no-fund-transactions-message" class="text-gray-500 italic">Chưa có giao dịch quỹ nào.</p>
                         </div>
                     </div>
                 </section>

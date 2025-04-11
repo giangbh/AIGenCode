@@ -1,139 +1,170 @@
 /**
- * Storage utility for the CafeThu6 application
- * Handles data persistence with localStorage
+ * Storage Utility
+ * Provides storage operations for the application
+ * Originally based on localStorage, now uses Supabase
  */
 
-// Storage keys
-export const STORAGE_KEYS = {
-    EXPENSES: 'ezsplit_expenses_v2',
-    FUND: 'ezsplit_groupfund_v2',
-    MEMBERS: 'ezsplit_members_v2',
-    BANK_ACCOUNTS: 'ezsplit_bankaccounts_v2'
-};
+import * as supabaseClient from './supabase.js';
+
+// Dữ liệu cache để giảm số lượng request đến Supabase
+let expensesCache = null;
+let fundTransactionsCache = null;
+let membersCache = null;
 
 /**
- * Save data to localStorage
- * @param {string} key - The storage key
- * @param {any} data - The data to save
+ * Khởi tạo bộ nhớ
+ * @param {Array} defaultMembers - Danh sách thành viên mặc định
+ * @param {Object} defaultBankAccounts - Tài khoản ngân hàng mặc định
  */
-export const saveData = (key, data) => {
+export async function initializeStorage(defaultMembers, defaultBankAccounts) {
     try {
-        localStorage.setItem(key, JSON.stringify(data));
+        await supabaseClient.initializeDefaultData(defaultMembers, defaultBankAccounts);
     } catch (error) {
-        console.error(`Error saving data to localStorage: ${error}`);
+        console.error('Lỗi khi khởi tạo dữ liệu:', error);
     }
-};
+}
 
 /**
- * Load data from localStorage
- * @param {string} key - The storage key
- * @param {any} defaultValue - Default value if no data is found
- * @returns {any} The loaded data or default value
+ * Lưu danh sách chi tiêu
+ * @param {Array} expenses - Danh sách chi tiêu
  */
-export const loadData = (key, defaultValue = null) => {
+export async function saveExpenses(expenses) {
+    expensesCache = [...expenses];
+    // Không cần làm gì, vì chúng ta sẽ sử dụng hàm CRUD trực tiếp
+}
+
+/**
+ * Tải danh sách chi tiêu
+ * @returns {Array} Danh sách chi tiêu
+ */
+export async function loadExpenses() {
     try {
-        const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : defaultValue;
+        if (!expensesCache) {
+            expensesCache = await supabaseClient.getExpenses();
+        }
+        return expensesCache;
     } catch (error) {
-        console.error(`Error loading data from localStorage: ${error}`);
-        return defaultValue;
+        console.error('Lỗi khi tải chi tiêu:', error);
+        return [];
     }
-};
+}
 
 /**
- * Save expenses data
- * @param {Array} expenses - The expenses array
+ * Lưu danh sách giao dịch quỹ
+ * @param {Array} transactions - Danh sách giao dịch
  */
-export const saveExpenses = (expenses) => {
-    saveData(STORAGE_KEYS.EXPENSES, expenses);
-};
+export async function saveFundTransactions(transactions) {
+    fundTransactionsCache = [...transactions];
+    // Không cần làm gì, vì chúng ta sẽ sử dụng hàm CRUD trực tiếp
+}
 
 /**
- * Load expenses data
- * @returns {Array} The expenses array or empty array if none
+ * Tải danh sách giao dịch quỹ
+ * @returns {Array} Danh sách giao dịch
  */
-export const loadExpenses = () => {
-    return loadData(STORAGE_KEYS.EXPENSES, []);
-};
+export async function loadFundTransactions() {
+    try {
+        if (!fundTransactionsCache) {
+            fundTransactionsCache = await supabaseClient.getFundTransactions();
+        }
+        return fundTransactionsCache;
+    } catch (error) {
+        console.error('Lỗi khi tải giao dịch quỹ:', error);
+        return [];
+    }
+}
 
 /**
- * Save group fund data
- * @param {number} balance - The current fund balance
- * @param {Array} transactions - The fund transactions
- * @param {Object} memberBalances - Member balances in the fund
+ * Lưu danh sách thành viên
+ * @param {Array} members - Danh sách thành viên
  */
-export const saveGroupFund = (balance, transactions, memberBalances) => {
-    const fundData = { 
-        balance: balance, 
-        transactions: transactions,
-        memberBalances: memberBalances
-    };
-    saveData(STORAGE_KEYS.FUND, fundData);
-};
+export async function saveMembers(members) {
+    membersCache = [...members];
+    // Không cần làm gì, vì chúng ta sẽ sử dụng hàm CRUD trực tiếp
+}
 
 /**
- * Load group fund data
- * @returns {Object} The fund data object
+ * Tải danh sách thành viên
+ * @returns {Array} Danh sách thành viên
  */
-export const loadGroupFund = () => {
-    return loadData(STORAGE_KEYS.FUND, {
-        balance: 0,
-        transactions: [],
-        memberBalances: {}
-    });
-};
+export async function loadMembers() {
+    try {
+        if (!membersCache) {
+            const membersData = await supabaseClient.getMembers();
+            // Convert từ định dạng Supabase sang định dạng ứng dụng
+            membersCache = membersData.map(m => m.name);
+        }
+        return membersCache;
+    } catch (error) {
+        console.error('Lỗi khi tải thành viên:', error);
+        return [];
+    }
+}
 
 /**
- * Save members list
- * @param {Array} members - The members array
+ * Lưu tài khoản ngân hàng của các thành viên
+ * @param {Object} bankAccounts - Đối tượng chứa tài khoản ngân hàng
  */
-export const saveMembers = (members) => {
-    saveData(STORAGE_KEYS.MEMBERS, members);
-};
+export async function saveBankAccounts(bankAccounts) {
+    // Không cần làm gì, vì chúng ta sẽ cập nhật trực tiếp khi thay đổi thành viên
+}
 
 /**
- * Load members list
- * @param {Array} defaultMembers - Default members if none found
- * @returns {Array} The members array
+ * Tải tài khoản ngân hàng của các thành viên
+ * @returns {Object} Đối tượng chứa tài khoản ngân hàng
  */
-export const loadMembers = (defaultMembers = []) => {
-    return loadData(STORAGE_KEYS.MEMBERS, defaultMembers);
-};
+export async function loadBankAccounts() {
+    try {
+        const membersData = await supabaseClient.getMembers();
+        const bankAccounts = {};
+        
+        // Convert từ định dạng Supabase sang định dạng ứng dụng
+        membersData.forEach(member => {
+            bankAccounts[member.name] = member.bank_account || '';
+        });
+        
+        return bankAccounts;
+    } catch (error) {
+        console.error('Lỗi khi tải tài khoản ngân hàng:', error);
+        return {};
+    }
+}
 
 /**
- * Save bank accounts data
- * @param {Object} bankAccounts - The bank accounts object
+ * Xóa tất cả dữ liệu
  */
-export const saveBankAccounts = (bankAccounts) => {
-    saveData(STORAGE_KEYS.BANK_ACCOUNTS, bankAccounts);
-};
+export function clearAllData() {
+    // Khi chuyển sang Supabase, chúng ta sẽ không xóa dữ liệu từ database
+    // Thay vào đó, chỉ xóa cache
+    expensesCache = null;
+    fundTransactionsCache = null;
+    membersCache = null;
+}
 
 /**
- * Load bank accounts data
- * @param {Object} defaultAccounts - Default accounts if none found
- * @returns {Object} The bank accounts object
+ * Cập nhật dữ liệu cache
+ * @param {string} type - Loại dữ liệu ('expenses', 'fundTransactions', 'members')
  */
-export const loadBankAccounts = (defaultAccounts = {}) => {
-    return loadData(STORAGE_KEYS.BANK_ACCOUNTS, defaultAccounts);
-};
+export function invalidateCache(type) {
+    switch (type) {
+        case 'expenses':
+            expensesCache = null;
+            break;
+        case 'fundTransactions':
+            fundTransactionsCache = null;
+            break;
+        case 'members':
+            membersCache = null;
+            break;
+        default:
+            expensesCache = null;
+            fundTransactionsCache = null;
+            membersCache = null;
+            break;
+    }
+}
 
 /**
- * Save all application data at once
- * @param {Object} appData - Object containing all app data
+ * API Supabase cho controllers
  */
-export const saveAllData = (appData) => {
-    saveExpenses(appData.expenses);
-    saveGroupFund(appData.groupFundBalance, appData.groupFundTransactions, appData.memberBalances);
-    saveMembers(appData.members);
-    saveBankAccounts(appData.bankAccounts);
-};
-
-/**
- * Clear all application data from localStorage
- */
-export const clearAllData = () => {
-    localStorage.removeItem(STORAGE_KEYS.EXPENSES);
-    localStorage.removeItem(STORAGE_KEYS.FUND);
-    localStorage.removeItem(STORAGE_KEYS.MEMBERS);
-    localStorage.removeItem(STORAGE_KEYS.BANK_ACCOUNTS);
-}; 
+export const supabase = supabaseClient; 

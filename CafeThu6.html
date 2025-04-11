@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -36,6 +37,12 @@
                 </button>
                 <button class="tab-button px-6 py-3" data-tab="members">
                     <i data-lucide="users" class="mr-1"></i> Thành viên
+                </button>
+                
+                <!-- Nút làm mới dữ liệu -->
+                <button id="refresh-data-btn" class="ml-auto px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md flex items-center">
+                    <i data-lucide="refresh-cw" class="w-4 h-4 mr-1"></i>
+                    <span>Làm mới dữ liệu</span>
                 </button>
             </div>
         </nav>

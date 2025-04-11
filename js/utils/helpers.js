@@ -24,11 +24,43 @@ export const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
 export const formatCurrency = (amount) => CURRENCY_FORMATTER.format(amount);
 
 /**
+ * Parse shorthand amount notation (1k, 1M, 1B) to number
+ * @param {string} value - Input value with possible shorthand notation
+ * @returns {number} Parsed amount
+ */
+export const parseShorthandAmount = (value) => {
+    if (!value) return 0;
+    
+    // Remove any formatting characters
+    value = value.replace(/[.,\s]/g, '');
+    
+    // Check for shorthand notations
+    const lowerValue = value.toLowerCase();
+    
+    if (lowerValue.endsWith('k')) {
+        return parseInt(lowerValue.slice(0, -1)) * 1000;
+    } else if (lowerValue.endsWith('m')) {
+        return parseInt(lowerValue.slice(0, -1)) * 1000000;
+    } else if (lowerValue.endsWith('b')) {
+        return parseInt(lowerValue.slice(0, -1)) * 1000000000;
+    }
+    
+    return parseInt(value) || 0;
+};
+
+/**
  * Format an input value for display in currency input fields
  * @param {string} value - The input value
  * @returns {string} Formatted value
  */
 export const formatAmountInput = (value) => { 
+    // Check for shorthand notation
+    if (/[kmb]$/i.test(value)) {
+        // Convert from shorthand to full number
+        const amount = parseShorthandAmount(value);
+        return INPUT_AMOUNT_FORMATTER.format(amount);
+    }
+    
     // Remove non-numeric characters
     const numericValue = value.replace(/[^\d]/g, '');
     if (!numericValue) return '';
@@ -44,6 +76,11 @@ export const formatAmountInput = (value) => {
  * @returns {number} The parsed amount as a number
  */
 export const parseFormattedAmount = (formattedValue) => { 
+    // Check for shorthand notation first
+    if (/[kmb]$/i.test(formattedValue)) {
+        return parseShorthandAmount(formattedValue);
+    }
+    
     // Remove all non-numeric characters
     const numberString = formattedValue.replace(/[^\d]/g, '');
     return parseInt(numberString, 10) || 0;

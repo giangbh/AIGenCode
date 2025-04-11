@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CafeThu6 E2E Tests</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mocha/mocha.css">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .test-info {
+            padding: 10px;
+            background-color: #e0f2fe;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        #iframe-container {
+            border: 1px solid #ddd;
+            margin-bottom: 20px;
+            height: 500px;
+            display: none;
+        }
+        #test-iframe {
+            width: 100%;
+            height: 100%;
+            border: 0;
+        }
+        h2 {
+            color: #4b5563;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>CafeThu6 End-to-End Tests</h1>
+    
+    <div class="warning">
+        <strong>Important:</strong> These tests will manipulate application data. Make sure you've backed up any important data before running tests.
+    </div>
+    
+    <div class="test-info">
+        <p>This test runner executes real user flows against your CafeThu6 application to verify that critical features work correctly.</p>
+        <p>Each test will reset application data before running to ensure a clean state.</p>
+    </div>
+    
+    <div class="test-controls">
+        <button id="run-tests-btn">Run All Tests</button>
+        <select id="test-selector">
+            <option value="all">All Tests</option>
+            <option value="expense-flow">Expense Management Flow</option>
+            <option value="group-fund-flow">Group Fund Flow</option>
+            <option value="member-flow">Member Management Flow</option>
+        </select>
+        <label>
+            <input type="checkbox" id="show-app-checkbox">
+            Show application during tests
+        </label>
+    </div>
+    
+    <div id="iframe-container">
+        <iframe id="test-iframe" src="../CafeThu6.html"></iframe>
+    </div>
+    
+    <div id="mocha"></div>
+    
+    <!-- Load test dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/chai/chai.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mocha/mocha.js"></script>
+    
+    <script>
+        mocha.setup('bdd');
+        const expect = chai.expect;
+        const assert = chai.assert;
+        
+        // Show/hide application iframe
+        const showAppCheckbox = document.getElementById('show-app-checkbox');
+        const iframeContainer = document.getElementById('iframe-container');
+        
+        showAppCheckbox.addEventListener('change', () => {
+            iframeContainer.style.display = showAppCheckbox.checked ? 'block' : 'none';
+        });
+        
+        // Handle test selection
+        const testSelector = document.getElementById('test-selector');
+        const runTestsBtn = document.getElementById('run-tests-btn');
+        
+        runTestsBtn.addEventListener('click', () => {
+            // Clear previous test results
+            document.getElementById('mocha').innerHTML = '';
+            mocha.setup('bdd');
+            
+            // Run selected tests
+            const selectedTest = testSelector.value;
+            runTests(selectedTest);
+        });
+        
+        function runTests(testType) {
+            // Load the test modules based on selection
+            if (testType === 'all' || testType === 'expense-flow') {
+                loadScript('expense-flow-test.js');
+            }
+            
+            if (testType === 'all' || testType === 'group-fund-flow') {
+                loadScript('group-fund-flow-test.js');
+            }
+            
+            if (testType === 'all' || testType === 'member-flow') {
+                loadScript('member-flow-test.js');
+            }
+            
+            // Start Mocha after scripts are loaded
+            setTimeout(() => {
+                mocha.run();
+            }, 500);
+        }
+        
+        function loadScript(src) {
+            const script = document.createElement('script');
+            script.src = src;
+            script.type = 'module';
+            document.head.appendChild(script);
+        }
+    </script>
+</body>
+</html> 

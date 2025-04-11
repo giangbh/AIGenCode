@@ -3,7 +3,7 @@
  * Manages members and their bank accounts
  */
 
-import { saveMembers, loadMembers, saveBankAccounts, loadBankAccounts } from '../utils/storage.js';
+import { loadMembers, loadBankAccounts, invalidateCache, supabase } from '../utils/storage.js';
 
 export class MemberManager {
     /**
@@ -24,42 +24,29 @@ export class MemberManager {
     /**
      * Load member data from storage
      */
-    loadData() {
-        // Load members with defaults if none exist
-        this.members = loadMembers(this.defaultMembers);
-        
-        // Load bank accounts with defaults if none exist
-        this.bankAccounts = loadBankAccounts(this.defaultAccounts);
-        
-        // Ensure all default members are included
-        let missingDefaultMembers = false;
-        
-        this.defaultMembers.forEach(defaultMember => {
-            if (!this.members.includes(defaultMember)) {
-                this.members.push(defaultMember);
-                missingDefaultMembers = true;
-            }
-        });
-        
-        // Ensure all default members have their bank accounts
-        this.defaultMembers.forEach(member => {
-            if (this.defaultAccounts[member] && !this.bankAccounts[member]) {
-                this.bankAccounts[member] = this.defaultAccounts[member];
-            }
-        });
-        
-        // Save if any changes were made
-        if (missingDefaultMembers) {
-            this.saveData();
+    async loadData() {
+        try {
+            // Load members with defaults if none exist
+            this.members = await loadMembers(this.defaultMembers);
+            
+            // Load bank accounts with defaults if none exist
+            this.bankAccounts = await loadBankAccounts(this.defaultAccounts);
+        } catch (error) {
+            console.error('Lỗi khi tải dữ liệu thành viên:', error);
+            // Fall back to default members if loading fails
+            this.members = [...this.defaultMembers];
+            this.bankAccounts = {...this.defaultAccounts};
         }
     }
     
     /**
      * Save member data to storage
+     * Không còn cần thiết khi sử dụng Supabase
+     * Mỗi thao tác sẽ cập nhật trực tiếp vào Supabase
      */
     saveData() {
-        saveMembers(this.members);
-        saveBankAccounts(this.bankAccounts);
+        // Method is kept for compatibility, but implementation is empty
+        // as we're now using direct Supabase operations
     }
     
     /**
@@ -93,7 +80,7 @@ export class MemberManager {
      * @param {string} [accountNumber] - Optional bank account number
      * @returns {boolean} True if added successfully
      */
-    addMember(name, accountNumber = '') {
+    async addMember(name, accountNumber = '') {
         // Validate name
         if (!name || typeof name !== 'string' || name.trim() === '') {
             return false;
@@ -106,18 +93,24 @@ export class MemberManager {
             return false;
         }
         
-        // Add member
-        this.members.push(name);
-        
-        // Add bank account if provided
-        if (accountNumber) {
-            this.bankAccounts[name] = accountNumber;
+        try {
+            // Add member to Supabase
+            await supabase.addMember(name, accountNumber);
+            
+            // Update local cache
+            this.members.push(name);
+            if (accountNumber) {
+                this.bankAccounts[name] = accountNumber;
+            }
+            
+            // Invalidate cache to ensure fresh data on next load
+            invalidateCache('members');
+            
+            return true;
+        } catch (error) {
+            console.error('Lỗi khi thêm thành viên:', error);
+            return false;
         }
-        
-        // Save changes
-        this.saveData();
-        
-        return true;
     }
     
     /**
@@ -126,7 +119,7 @@ export class MemberManager {
      * @param {string} accountNumber - New bank account number
      * @returns {boolean} True if updated successfully
      */
-    updateMemberAccount(member, accountNumber) {
+    async updateMemberAccount(member, accountNumber) {
         // Validate member
         if (!this.members.includes(member)) {
             return false;
@@ -137,13 +130,21 @@ export class MemberManager {
             return false;
         }
         
-        // Update account
-        this.bankAccounts[member] = accountNumber;
-        
-        // Save changes
-        this.saveData();
-        
-        return true;
+        try {
+            // Update account in Supabase
+            await supabase.updateMember(member, accountNumber);
+            
+            // Update local cache
+            this.bankAccounts[member] = accountNumber;
+            
+            // Invalidate cache to ensure fresh data on next load
+            invalidateCache('members');
+            
+            return true;
+        } catch (error) {
+            console.error('Lỗi khi cập nhật tài khoản thành viên:', error);
+            return false;
+        }
     }
     
     /**
@@ -151,21 +152,27 @@ export class MemberManager {
      * @param {string} member - The member to remove
      * @returns {boolean} True if removed successfully
      */
-    removeMember(member) {
+    async removeMember(member) {
         const index = this.members.indexOf(member);
         if (index === -1) {
             return false;
         }
         
-        // Remove member
-        this.members.splice(index, 1);
-        
-        // Remove bank account
-        delete this.bankAccounts[member];
-        
-        // Save changes
-        this.saveData();
-        
-        return true;
+        try {
+            // Remove member from Supabase
+            await supabase.deleteMember(member);
+            
+            // Update local cache
+            this.members.splice(index, 1);
+            delete this.bankAccounts[member];
+            
+            // Invalidate cache to ensure fresh data on next load
+            invalidateCache('members');
+            
+            return true;
+        } catch (error) {
+            console.error('Lỗi khi xóa thành viên:', error);
+            return false;
+        }
     }
 } 

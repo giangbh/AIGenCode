@@ -9,7 +9,8 @@ import { MemberManager } from './controllers/MemberManager.js';
 import { ExpenseUIController } from './controllers/ExpenseUIController.js';
 import { FundUIController } from './controllers/FundUIController.js';
 import { MemberUIController } from './controllers/MemberUIController.js';
-import { clearAllData } from './utils/storage.js';
+import { initializeStorage, clearAllData, supabase } from './utils/storage.js';
+import { showMessage } from './utils/helpers.js';
 
 class App {
     /**
@@ -19,7 +20,7 @@ class App {
         // Default application data
         this.defaultMembers = ["Giang", "Quân", "Toàn", "Quang", "Trung", "Nhật"];
         this.defaultBankAccounts = { 
-            "Giang": "9876543210", 
+            "Giang": "8862632015", 
             "Quân": "8765432109", 
             "Toàn": "1240067256", 
             "Quang": "6543210987", 
@@ -27,46 +28,87 @@ class App {
             "Nhật": "4321098765" 
         };
         
-        // Initialize managers
-        this.memberManager = new MemberManager(this.defaultMembers, this.defaultBankAccounts);
-        this.fundManager = new GroupFundManager();
-        this.expenseManager = new ExpenseManager(this.fundManager);
-        
-        // Make sure member balances are initialized
-        this.fundManager.initializeMemberBalances(this.memberManager.getAllMembers());
-        
-        // Initialize UI controllers
-        this.expenseUI = new ExpenseUIController(this);
-        this.fundUI = new FundUIController(this);
-        this.memberUI = new MemberUIController(this);
-        
-        // Initialize Lucide icons
-        lucide.createIcons();
+        // Supabase initialization status
+        this.initialized = false;
     }
     
     /**
      * Initialize the application
      */
-    init() {
-        // Initialize UI components
-        this.expenseUI.populateMembers();
-        
-        // Render all components
-        this.renderAll();
+    async init() {
+        try {
+            // Initialize Supabase with default data
+            await initializeStorage(this.defaultMembers, this.defaultBankAccounts);
+            
+            // Initialize managers
+            this.memberManager = new MemberManager(this.defaultMembers, this.defaultBankAccounts);
+            this.fundManager = new GroupFundManager();
+            this.expenseManager = new ExpenseManager(this.fundManager);
+            
+            // Wait for managers to load data
+            await Promise.all([
+                this.memberManager.loadData(),
+                this.fundManager.loadData()
+            ]);
+            await this.expenseManager.loadData();
+            
+            // Make sure member balances are initialized
+            this.fundManager.initializeMemberBalances(this.memberManager.getAllMembers());
+            
+            // Initialize UI controllers
+            this.expenseUI = new ExpenseUIController(this);
+            this.fundUI = new FundUIController(this);
+            this.memberUI = new MemberUIController(this);
+            
+            // Initialize Lucide icons
+            lucide.createIcons();
+            
+            // Initialize UI components
+            this.expenseUI.populateMembers();
+            
+            // Thiết lập nút làm mới dữ liệu
+            this.setupRefreshButton();
+            
+            // Render all components
+            await this.renderAll();
+            
+            // Mark as initialized
+            this.initialized = true;
+            console.log('Ứng dụng đã khởi tạo thành công với Supabase');
+        } catch (error) {
+            console.error('Lỗi khi khởi tạo ứng dụng:', error);
+            this._showInitError(error.message);
+        }
     }
     
     /**
      * Render all UI components
      */
-    renderAll() {
-        this.renderExpenses();
-        this.renderGroupFund();
-        this.renderMembers();
-        
-        // Calculate and render expense results
-        const members = this.memberManager.getAllMembers();
-        const results = this.expenseManager.calculateResults(members);
-        this.expenseUI.renderResults(results);
+    async renderAll() {
+        try {
+            // Đảm bảo dữ liệu được tải lại từ Supabase
+            await Promise.all([
+                this.memberManager.loadData(),
+                this.fundManager.loadData()
+            ]);
+            await this.expenseManager.loadData();
+            
+            // Cập nhật giao diện với dữ liệu mới
+            this.renderExpenses();
+            this.renderGroupFund();
+            this.renderMembers();
+            
+            // Calculate and render expense results
+            const members = this.memberManager.getAllMembers();
+            const results = this.expenseManager.calculateResults(members);
+            this.expenseUI.renderResults(results);
+        } catch (error) {
+            console.error('Lỗi khi làm mới giao diện:', error);
+            // Thử render với dữ liệu hiện có
+            this.renderExpenses();
+            this.renderGroupFund();
+            this.renderMembers();
+        }
     }
     
     /**
@@ -102,17 +144,129 @@ class App {
     /**
      * Clear all application data
      */
-    clearAllData() {
+    async clearAllData() {
+        clearAllData();
         this.expenseManager = new ExpenseManager(this.fundManager);
-        this.fundManager.clearAllData();
-        this.renderAll();
+        await this.fundManager.clearAllData();
+        await this.renderAll();
+    }
+    
+    /**
+     * Display initialization error message
+     * @private
+     * @param {string} message - Error message
+     */
+    _showInitError(message) {
+        const errorContainer = document.createElement('div');
+        errorContainer.className = 'fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50';
+        
+        const errorBox = document.createElement('div');
+        errorBox.className = 'bg-white p-6 rounded-lg shadow-lg max-w-lg w-full';
+        
+        const title = document.createElement('h2');
+        title.className = 'text-xl font-bold text-red-600 mb-4';
+        title.textContent = 'Lỗi kết nối Supabase';
+        
+        const content = document.createElement('p');
+        content.className = 'mb-4';
+        content.textContent = `Không thể kết nối đến cơ sở dữ liệu Supabase. Vui lòng kiểm tra cấu hình và kết nối internet. Chi tiết lỗi: ${message}`;
+        
+        const hint = document.createElement('p');
+        hint.className = 'text-sm text-gray-600 mb-4';
+        hint.textContent = 'Bạn cần cập nhật thông tin kết nối Supabase trong file js/utils/supabase.js';
+        
+        const button = document.createElement('button');
+        button.className = 'px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600';
+        button.textContent = 'Đóng';
+        button.onclick = () => errorContainer.remove();
+        
+        errorBox.appendChild(title);
+        errorBox.appendChild(content);
+        errorBox.appendChild(hint);
+        errorBox.appendChild(button);
+        errorContainer.appendChild(errorBox);
+        
+        document.body.appendChild(errorContainer);
+    }
+    
+    /**
+     * Get status of Supabase connectivity
+     * @returns {boolean} True if connected successfully
+     */
+    isConnected() {
+        return this.initialized;
+    }
+
+    /**
+     * Thiết lập nút làm mới dữ liệu
+     */
+    setupRefreshButton() {
+        const refreshBtn = document.getElementById('refresh-data-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', async () => {
+                try {
+                    // Hiển thị trạng thái đang làm mới
+                    const originalText = refreshBtn.innerHTML;
+                    refreshBtn.disabled = true;
+                    refreshBtn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 mr-1 animate-spin"></i><span>Đang làm mới...</span>';
+                    lucide.createIcons({
+                        scope: refreshBtn
+                    });
+                    
+                    // Làm mới dữ liệu từ Supabase
+                    await Promise.all([
+                        this.memberManager.loadData(),
+                        this.fundManager.loadData()
+                    ]);
+                    await this.expenseManager.loadData();
+                    
+                    // Cập nhật giao diện
+                    await this.renderAll();
+                    
+                    // Thông báo thành công
+                    showMessage('Dữ liệu đã được cập nhật từ Supabase');
+                    
+                    // Khôi phục trạng thái nút
+                    refreshBtn.disabled = false;
+                    refreshBtn.innerHTML = originalText;
+                    lucide.createIcons({
+                        scope: refreshBtn
+                    });
+                } catch (error) {
+                    console.error('Lỗi khi làm mới dữ liệu:', error);
+                    showMessage('Lỗi khi làm mới dữ liệu', 'error');
+                    
+                    // Khôi phục trạng thái nút
+                    refreshBtn.disabled = false;
+                    refreshBtn.innerHTML = '<i data-lucide="refresh-cw" class="w-4 h-4 mr-1"></i><span>Làm mới dữ liệu</span>';
+                    lucide.createIcons({
+                        scope: refreshBtn
+                    });
+                }
+            });
+        }
     }
 }
 
 // Initialize and start the application when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Show loading indicator
+    const loadingEl = document.createElement('div');
+    loadingEl.className = 'fixed inset-0 flex items-center justify-center bg-white z-50';
+    loadingEl.innerHTML = `
+        <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+            <p class="mt-4 text-gray-600">Đang kết nối đến Supabase...</p>
+        </div>
+    `;
+    document.body.appendChild(loadingEl);
+    
+    // Initialize app
     const app = new App();
-    app.init();
+    await app.init();
+    
+    // Remove loading indicator
+    loadingEl.remove();
     
     // Make app globally accessible for debugging
     window.app = app;

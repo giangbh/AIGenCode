@@ -98,11 +98,12 @@ export class ExpenseUIController extends UIController {
         const GROUP_FUND_PAYER_ID = this.app.expenseManager.GROUP_FUND_PAYER_ID;
         
         // Payer dropdown
-        this.payerSelect.innerHTML = '<option value="" disabled selected>-- Chọn người trả --</option>';
+        this.payerSelect.innerHTML = '<option value="" disabled>-- Chọn người trả --</option>';
         const groupFundOption = document.createElement('option');
         groupFundOption.value = GROUP_FUND_PAYER_ID; 
         groupFundOption.textContent = 'Quỹ nhóm';
         groupFundOption.classList.add('font-semibold', 'text-sky-700'); 
+        groupFundOption.selected = true; // Set as default selected option
         this.payerSelect.appendChild(groupFundOption);
         
         members.forEach(member => { 
@@ -359,7 +360,7 @@ export class ExpenseUIController extends UIController {
      * Handle form submission
      * @param {Event} event - The form submission event
      */
-    handleFormSubmit(event) {
+    async handleFormSubmit(event) {
         event.preventDefault();
         
         const name = this.expenseNameInput.value.trim();
@@ -388,9 +389,13 @@ export class ExpenseUIController extends UIController {
         }
         
         try {
+            // Hiển thị trạng thái đang xử lý
+            this.saveExpenseBtn.disabled = true;
+            this.saveBtnText.textContent = this.editingExpenseId ? 'Đang cập nhật...' : 'Đang lưu...';
+            
             if (this.editingExpenseId) {
                 // Edit existing expense
-                this.app.expenseManager.updateExpense(this.editingExpenseId, {
+                await this.app.expenseManager.updateExpense(this.editingExpenseId, {
                     name,
                     amount,
                     date,
@@ -403,7 +408,7 @@ export class ExpenseUIController extends UIController {
                 showMessage('Chi tiêu đã được cập nhật');
             } else {
                 // Create new expense
-                this.app.expenseManager.addExpense({
+                await this.app.expenseManager.addExpense({
                     name,
                     amount,
                     date,
@@ -416,11 +421,60 @@ export class ExpenseUIController extends UIController {
                 showMessage('Chi tiêu mới đã được thêm');
             }
             
-            // Update UI
-            this.app.renderAll();
+            // Update UI với cơ chế làm mới hoàn chỉnh
+            try {
+                // Làm mới dữ liệu từ Supabase
+                await Promise.all([
+                    this.app.fundManager.loadData(),
+                    this.app.expenseManager.loadData()
+                ]);
+                
+                // Cập nhật UI
+                this.app.renderExpenses();
+                this.app.renderGroupFund();
+                
+                // Cập nhật phần kết quả tính toán
+                const members = this.app.memberManager.getAllMembers();
+                const results = this.app.expenseManager.calculateResults(members);
+                this.renderResults(results);
+                
+                // Cập nhật số dư quỹ trên tất cả các tab
+                this.updateAllFundBalanceDisplays();
+            } catch (error) {
+                console.error('Lỗi khi cập nhật giao diện:', error);
+            }
+            
             this.resetForm();
         } catch (error) {
             showMessage(error.message, 'error');
+        } finally {
+            // Khôi phục trạng thái nút
+            this.saveExpenseBtn.disabled = false;
+            this.saveBtnText.textContent = this.editingExpenseId ? 'Cập nhật' : 'Lưu chi tiêu';
+        }
+    }
+    
+    /**
+     * Cập nhật hiển thị số dư quỹ trên tất cả các tab
+     */
+    updateAllFundBalanceDisplays() {
+        const balance = this.app.fundManager.getBalance();
+        
+        // Cập nhật số dư quỹ trên tab chi tiêu
+        const expensesGroupFundBalanceSpan = document.getElementById('expenses-group-fund-balance');
+        if (expensesGroupFundBalanceSpan) {
+            expensesGroupFundBalanceSpan.textContent = formatCurrency(balance);
+        }
+        
+        // Cập nhật số dư trên các tab khác
+        const fundBalanceCardSpan = document.getElementById('group-fund-balance-card');
+        if (fundBalanceCardSpan) {
+            fundBalanceCardSpan.textContent = formatCurrency(balance);
+        }
+        
+        const fundBalanceInfoSpan = document.getElementById('group-fund-balance-info');
+        if (fundBalanceInfoSpan) {
+            fundBalanceInfoSpan.textContent = formatCurrency(balance);
         }
     }
     
@@ -486,11 +540,42 @@ export class ExpenseUIController extends UIController {
      * Handle delete expense action
      * @param {string} expenseId - The expense ID
      */
-    handleDeleteExpense(expenseId) {
+    async handleDeleteExpense(expenseId) {
         if (confirm('Bạn có chắc chắn muốn xóa chi tiêu này?')) {
-            if (this.app.expenseManager.deleteExpense(expenseId)) {
-                this.app.renderAll();
-                showMessage('Chi tiêu đã được xóa');
+            try {
+                // Hiển thị thông báo đang xử lý
+                showMessage('Đang xử lý...', 'info');
+                
+                // Xóa chi tiêu
+                if (await this.app.expenseManager.deleteExpense(expenseId)) {
+                    // Làm mới dữ liệu với cơ chế hoàn chỉnh
+                    try {
+                        // Refresh dữ liệu
+                        await Promise.all([
+                            this.app.fundManager.loadData(),
+                            this.app.expenseManager.loadData()
+                        ]);
+                        
+                        // Cập nhật UI
+                        this.app.renderExpenses();
+                        this.app.renderGroupFund();
+                        
+                        // Cập nhật phần kết quả tính toán
+                        const members = this.app.memberManager.getAllMembers();
+                        const results = this.app.expenseManager.calculateResults(members);
+                        this.renderResults(results);
+                        
+                        // Cập nhật số dư quỹ trên tất cả các tab
+                        this.updateAllFundBalanceDisplays();
+                        
+                        showMessage('Chi tiêu đã được xóa');
+                    } catch (refreshError) {
+                        console.error('Lỗi khi làm mới dữ liệu:', refreshError);
+                        showMessage('Chi tiêu đã được xóa nhưng không thể cập nhật giao diện. Vui lòng làm mới trang.');
+                    }
+                }
+            } catch (error) {
+                showMessage(`Lỗi khi xóa chi tiêu: ${error.message}`, 'error');
             }
         }
     }

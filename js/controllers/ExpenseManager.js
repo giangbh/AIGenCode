@@ -6,7 +6,7 @@
 import { Expense } from '../models/Expense.js';
 import { FundTransaction } from '../models/FundTransaction.js';
 import { formatCurrency, formatDisplayDate, showMessage } from '../utils/helpers.js';
-import { saveExpenses, loadExpenses } from '../utils/storage.js';
+import { loadExpenses, invalidateCache, supabase } from '../utils/storage.js';
 
 export class ExpenseManager {
     /**
@@ -25,17 +25,24 @@ export class ExpenseManager {
     /**
      * Load expense data from storage
      */
-    loadData() {
-        const expenseData = loadExpenses();
-        this.expenses = expenseData.map(exp => Expense.fromObject(exp));
+    async loadData() {
+        try {
+            const expenseData = await loadExpenses();
+            this.expenses = expenseData.map(exp => Expense.fromObject(exp));
+        } catch (error) {
+            console.error('Lỗi khi tải dữ liệu chi tiêu:', error);
+            this.expenses = [];
+        }
     }
     
     /**
      * Save expenses to storage
+     * Không còn cần thiết khi sử dụng Supabase
+     * Mỗi thao tác sẽ cập nhật trực tiếp vào Supabase
      */
     saveData() {
-        const expenseData = this.expenses.map(exp => exp.toObject());
-        saveExpenses(expenseData);
+        // Method is kept for compatibility, but implementation is empty
+        // as we're now using direct Supabase operations
     }
     
     /**
@@ -60,7 +67,7 @@ export class ExpenseManager {
      * @param {Object} expenseData - The expense data
      * @returns {Expense} The newly created expense
      */
-    addExpense(expenseData) {
+    async addExpense(expenseData) {
         // Check if fund has enough balance when it's the payer
         if (expenseData.payer === this.GROUP_FUND_PAYER_ID) {
             const fundBalance = this.fundManager.getBalance();
@@ -69,18 +76,27 @@ export class ExpenseManager {
             }
         }
         
-        // Create new expense
-        const expense = new Expense(expenseData);
-        this.expenses.push(expense);
-        
-        // If group fund is the payer, update fund balance
-        if (expense.payer === this.GROUP_FUND_PAYER_ID) {
-            this._handleGroupFundPayment(expense);
+        try {
+            // Add expense to Supabase
+            const savedExpense = await supabase.addExpense(expenseData);
+            
+            // Create new expense
+            const expense = Expense.fromObject(savedExpense);
+            this.expenses.push(expense);
+            
+            // If group fund is the payer, update fund balance
+            if (expense.payer === this.GROUP_FUND_PAYER_ID) {
+                await this._handleGroupFundPayment(expense);
+            }
+            
+            // Invalidate cache
+            invalidateCache('expenses');
+            
+            return expense;
+        } catch (error) {
+            console.error('Lỗi khi thêm chi tiêu:', error);
+            throw error;
         }
-        
-        // Save changes
-        this.saveData();
-        return expense;
     }
     
     /**
@@ -89,52 +105,76 @@ export class ExpenseManager {
      * @param {Object} newData - The updated expense data
      * @returns {Expense} The updated expense
      */
-    updateExpense(id, newData) {
+    async updateExpense(id, newData) {
         const index = this.expenses.findIndex(e => e.id === id);
+        
         if (index === -1) {
             throw new Error('Chi tiêu không tồn tại');
         }
         
         const oldExpense = this.expenses[index];
         
-        // Check if fund has enough balance when changing payer to fund
-        if (oldExpense.payer !== this.GROUP_FUND_PAYER_ID && 
-            newData.payer === this.GROUP_FUND_PAYER_ID) {
+        // Check if fund has enough balance when changing payer to group fund
+        if (newData.payer === this.GROUP_FUND_PAYER_ID && 
+            oldExpense.payer !== this.GROUP_FUND_PAYER_ID) {
             const fundBalance = this.fundManager.getBalance();
             if (newData.amount > fundBalance) {
                 throw new Error(`Số dư quỹ nhóm không đủ để chi trả khoản này. Số dư hiện tại: ${formatCurrency(fundBalance)}`);
             }
         }
         
-        // Update fund balance if payer changed
-        if (oldExpense.payer === this.GROUP_FUND_PAYER_ID && 
-            newData.payer !== this.GROUP_FUND_PAYER_ID) {
-            // Old payer was group fund, new payer is not - refund the group fund
-            this._handleGroupFundRefund(oldExpense);
-        } 
-        else if (oldExpense.payer !== this.GROUP_FUND_PAYER_ID && 
-                 newData.payer === this.GROUP_FUND_PAYER_ID) {
-            // Create new expense object for payment handling
-            const tempExpense = new Expense({
+        // If changing from group fund to a higher amount, check balance
+        if (newData.payer === this.GROUP_FUND_PAYER_ID && 
+            oldExpense.payer === this.GROUP_FUND_PAYER_ID &&
+            newData.amount > oldExpense.amount) {
+            const fundBalance = this.fundManager.getBalance();
+            const difference = newData.amount - oldExpense.amount;
+            if (difference > fundBalance) {
+                throw new Error(`Số dư quỹ nhóm không đủ để chi trả khoản chênh lệch. Số dư hiện tại: ${formatCurrency(fundBalance)}`);
+            }
+        }
+        
+        try {
+            // Update fund balance if payer changed
+            if (oldExpense.payer === this.GROUP_FUND_PAYER_ID && 
+                newData.payer !== this.GROUP_FUND_PAYER_ID) {
+                // Old payer was group fund, new payer is not - refund the group fund
+                await this._handleGroupFundRefund(oldExpense);
+            } 
+            else if (oldExpense.payer !== this.GROUP_FUND_PAYER_ID && 
+                     newData.payer === this.GROUP_FUND_PAYER_ID) {
+                // Create new expense object for payment handling
+                const tempExpense = new Expense({
+                    ...newData,
+                    id: oldExpense.id
+                });
+                
+                // Old payer was not group fund, new payer is - deduct from fund
+                await this._handleGroupFundPayment(tempExpense);
+            }
+            else if (oldExpense.payer === this.GROUP_FUND_PAYER_ID && 
+                     newData.payer === this.GROUP_FUND_PAYER_ID) {
+                // Both old and new payer are group fund, adjust for amount difference
+                await this._handleGroupFundUpdate(oldExpense, newData);
+            }
+            
+            // Update the expense in Supabase
+            const updatedExpense = await supabase.updateExpense(id, {
                 ...newData,
                 id: oldExpense.id
             });
             
-            // Old payer was not group fund, new payer is - deduct from fund
-            this._handleGroupFundPayment(tempExpense);
+            // Update local expense object
+            oldExpense.update(newData);
+            
+            // Invalidate cache
+            invalidateCache('expenses');
+            
+            return oldExpense;
+        } catch (error) {
+            console.error('Lỗi khi cập nhật chi tiêu:', error);
+            throw error;
         }
-        else if (oldExpense.payer === this.GROUP_FUND_PAYER_ID && 
-                 newData.payer === this.GROUP_FUND_PAYER_ID) {
-            // Both old and new payer are group fund, adjust for amount difference
-            this._handleGroupFundUpdate(oldExpense, newData);
-        }
-        
-        // Update the expense data
-        oldExpense.update(newData);
-        
-        // Save changes
-        this.saveData();
-        return oldExpense;
     }
     
     /**
@@ -142,23 +182,32 @@ export class ExpenseManager {
      * @param {string} id - The expense ID
      * @returns {boolean} True if deleted successfully
      */
-    deleteExpense(id) {
+    async deleteExpense(id) {
         const index = this.expenses.findIndex(e => e.id === id);
         if (index === -1) return false;
         
         const expense = this.expenses[index];
         
-        // If the expense was paid by the group fund, restore the balance
-        if (expense.payer === this.GROUP_FUND_PAYER_ID) {
-            this._handleGroupFundRefund(expense);
+        try {
+            // If the expense was paid by the group fund, restore the balance
+            if (expense.payer === this.GROUP_FUND_PAYER_ID) {
+                await this._handleGroupFundRefund(expense);
+            }
+            
+            // Delete expense from Supabase
+            await supabase.deleteExpense(id);
+            
+            // Remove the expense from local cache
+            this.expenses.splice(index, 1);
+            
+            // Invalidate cache
+            invalidateCache('expenses');
+            
+            return true;
+        } catch (error) {
+            console.error('Lỗi khi xóa chi tiêu:', error);
+            return false;
         }
-        
-        // Remove the expense
-        this.expenses.splice(index, 1);
-        
-        // Save changes
-        this.saveData();
-        return true;
     }
     
     /**
@@ -218,43 +267,40 @@ export class ExpenseManager {
         const transactions = [];
         
         if (hasNonFundExpenses) {
-            const debtors = members.filter(member => balances[member].net < 0)
-                .sort((a, b) => balances[a].net - balances[b].net);
-            const creditors = members.filter(member => balances[member].net > 0)
-                .sort((a, b) => balances[b].net - balances[a].net);
-            
-            // Generate simplified transactions
-            let totalMoved = 0;
-            
-            let debtorIndex = 0;
-            let creditorIndex = 0;
-            
-            while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
-                const debtor = debtors[debtorIndex];
-                const creditor = creditors[creditorIndex];
+            // Make copies for calculation
+            const creditors = members.filter(m => balances[m].net > 0)
+                .map(member => ({
+                    name: member,
+                    amount: balances[member].net
+                }))
+                .sort((a, b) => b.amount - a.amount);
                 
-                const debtAmount = Math.abs(balances[debtor].net);
-                const creditAmount = balances[creditor].net;
+            const debtors = members.filter(m => balances[m].net < 0)
+                .map(member => ({
+                    name: member,
+                    amount: -balances[member].net
+                }))
+                .sort((a, b) => b.amount - a.amount);
+            
+            // Calculate settlement transactions
+            while (creditors.length > 0 && debtors.length > 0) {
+                const creditor = creditors[0];
+                const debtor = debtors[0];
                 
-                const transferAmount = Math.min(debtAmount, creditAmount);
+                const amount = Math.min(creditor.amount, debtor.amount);
                 
-                totalMoved += transferAmount;
                 transactions.push({
-                    from: debtor,
-                    to: creditor,
-                    amount: Math.round(transferAmount)
+                    from: debtor.name,
+                    to: creditor.name,
+                    amount: amount,
+                    formattedAmount: formatCurrency(amount)
                 });
                 
-                balances[debtor].net += transferAmount;
-                balances[creditor].net -= transferAmount;
+                creditor.amount -= amount;
+                debtor.amount -= amount;
                 
-                if (Math.abs(balances[debtor].net) < 1) {
-                    debtorIndex++;
-                }
-                
-                if (Math.abs(balances[creditor].net) < 1) {
-                    creditorIndex++;
-                }
+                if (creditor.amount < 1) creditors.shift();
+                if (debtor.amount < 1) debtors.shift();
             }
         }
         
@@ -270,7 +316,7 @@ export class ExpenseManager {
      * @private
      * @param {Expense} expense - The expense
      */
-    _handleGroupFundPayment(expense) {
+    async _handleGroupFundPayment(expense) {
         // Create fund transaction for this expense
         const transaction = FundTransaction.createExpense(
             expense.id,
@@ -296,88 +342,50 @@ export class ExpenseManager {
         }
         
         // Update fund (decreases fund balance and adjusts member balances)
-        this.fundManager.addTransaction(transaction, memberBalances);
+        await this.fundManager.addTransaction(transaction, memberBalances);
     }
     
     /**
-     * Handle group fund refund (when removing or changing an expense)
+     * Handle refund to group fund (when expense paid by fund is deleted or updated)
      * @private
-     * @param {Expense} expense - The expense
+     * @param {Expense} expense - The expense that was paid by the fund
      */
-    _handleGroupFundRefund(expense) {
-        // Calculate member balances to be restored
+    async _handleGroupFundRefund(expense) {
+        // We need to update member balances to remove the expense
         const memberBalances = {};
         
         if (expense.equalSplit) {
             const splitAmount = expense.amount / expense.participants.length;
             expense.participants.forEach(participant => {
-                memberBalances[participant] = splitAmount; // positive = refund
+                memberBalances[participant] = splitAmount; // Positive to remove negative
             });
         } else {
             Object.entries(expense.splits).forEach(([participant, splitAmount]) => {
-                memberBalances[participant] = splitAmount; // positive = refund
+                memberBalances[participant] = splitAmount; // Positive to remove negative
             });
         }
         
-        // Remove the expense transaction and refund the balance
-        this.fundManager.removeExpenseTransaction(expense.id, memberBalances);
+        // Delete any fund transaction associated with this expense
+        await this.fundManager.removeExpenseTransaction(expense.id);
     }
     
     /**
-     * Handle group fund update (when updating an expense paid by group fund)
+     * Handle group fund update when amount changes but payer stays as group fund
      * @private
-     * @param {Expense} oldExpense - The old expense
-     * @param {Object} newData - The new expense data
+     * @param {Expense} oldExpense - The original expense
+     * @param {Object} newData - The updated expense data
      */
-    _handleGroupFundUpdate(oldExpense, newData) {
-        // First refund the old amounts (add back to member balances)
-        const refundBalances = {};
+    async _handleGroupFundUpdate(oldExpense, newData) {
+        // First refund the old expense
+        await this._handleGroupFundRefund(oldExpense);
         
-        if (oldExpense.equalSplit) {
-            const oldSplitAmount = oldExpense.amount / oldExpense.participants.length;
-            oldExpense.participants.forEach(participant => {
-                refundBalances[participant] = oldSplitAmount; // positive = refund
-            });
-        } else {
-            Object.entries(oldExpense.splits).forEach(([participant, splitAmount]) => {
-                refundBalances[participant] = splitAmount; // positive = refund
-            });
-        }
-        
-        // Then calculate the new amounts to deduct
-        const newDeductionBalances = {};
-        
-        if (newData.equalSplit) {
-            const newSplitAmount = newData.amount / newData.participants.length;
-            newData.participants.forEach(participant => {
-                newDeductionBalances[participant] = -newSplitAmount; // negative = deduction
-            });
-        } else {
-            Object.entries(newData.splits).forEach(([participant, splitAmount]) => {
-                newDeductionBalances[participant] = -splitAmount; // negative = deduction
-            });
-        }
-        
-        // Combine the balances (refunds + new deductions)
-        const combinedBalances = {};
-        
-        // Add all refunds
-        Object.entries(refundBalances).forEach(([participant, amount]) => {
-            combinedBalances[participant] = amount;
+        // Then create a new expense with the new data
+        const tempExpense = new Expense({
+            ...newData,
+            id: oldExpense.id
         });
         
-        // Add all new deductions
-        Object.entries(newDeductionBalances).forEach(([participant, amount]) => {
-            combinedBalances[participant] = (combinedBalances[participant] || 0) + amount;
-        });
-        
-        // Update the transaction in the fund
-        this.fundManager.updateExpenseTransaction(
-            oldExpense.id,
-            newData.name,
-            newData.amount,
-            newData.date,
-            combinedBalances
-        );
+        // Handle payment with new amount
+        await this._handleGroupFundPayment(tempExpense);
     }
 } 

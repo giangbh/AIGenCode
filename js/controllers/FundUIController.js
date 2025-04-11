@@ -135,7 +135,7 @@ export class FundUIController extends UIController {
      * Handle deposit form submission
      * @param {Event} event - The form submission event
      */
-    handleDepositSubmit(e) {
+    async handleDepositSubmit(e) {
         e.preventDefault();
         
         const amount = parseFormattedAmount(this.depositAmountInput.value);
@@ -153,18 +153,66 @@ export class FundUIController extends UIController {
             return;
         }
         
-        // Add deposit
-        this.app.fundManager.addDeposit(member, amount, date, note);
+        try {
+            // Hiển thị trạng thái đang xử lý
+            const submitBtn = this.depositForm.querySelector('button[type="submit"]');
+            const originalBtnText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Đang xử lý...';
+            
+            // Add deposit
+            await this.app.fundManager.addDeposit(member, amount, date, note);
+            
+            // Làm mới dữ liệu với cơ chế hoàn chỉnh
+            try {
+                // Refresh dữ liệu
+                await this.app.fundManager.loadData();
+                
+                // Cập nhật giao diện quỹ nhóm
+                this.renderFundStatus();
+                this.renderFundTransactions();
+                
+                // Cập nhật số dư quỹ trên tab chi tiêu và thành viên
+                this.updateAllFundBalanceDisplays();
+            } catch (refreshError) {
+                console.error('Lỗi khi làm mới dữ liệu:', refreshError);
+            }
+            
+            // Reset form
+            this.depositForm.reset();
+            this.depositDateInput.value = getTodayDateString();
+            
+            showMessage(`${member} đã nộp ${formatCurrency(amount)} vào quỹ nhóm`);
+        } catch (error) {
+            showMessage(`Lỗi khi thêm khoản nộp quỹ: ${error.message}`, 'error');
+        } finally {
+            // Khôi phục trạng thái nút
+            const submitBtn = this.depositForm.querySelector('button[type="submit"]');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Nộp quỹ';
+        }
+    }
+    
+    /**
+     * Cập nhật hiển thị số dư quỹ trên tất cả các tab
+     */
+    updateAllFundBalanceDisplays() {
+        const balance = this.app.fundManager.getBalance();
         
-        // Update UI
-        this.renderFundStatus();
-        this.renderFundTransactions();
+        // Cập nhật số dư quỹ trên tab chi tiêu
+        const expensesGroupFundBalanceSpan = document.getElementById('expenses-group-fund-balance');
+        if (expensesGroupFundBalanceSpan) {
+            expensesGroupFundBalanceSpan.textContent = formatCurrency(balance);
+        }
         
-        // Reset form
-        this.depositForm.reset();
-        this.depositDateInput.value = getTodayDateString();
+        // Cập nhật số dư trên tab quỹ nhóm
+        if (this.groupFundBalanceCardSpan) {
+            this.groupFundBalanceCardSpan.textContent = formatCurrency(balance);
+        }
         
-        showMessage(`${member} đã nộp ${formatCurrency(amount)} vào quỹ nhóm`);
+        if (this.groupFundBalanceInfoSpan) {
+            this.groupFundBalanceInfoSpan.textContent = formatCurrency(balance);
+        }
     }
     
     /**

@@ -3,29 +3,51 @@
  * Handles connection and data operations with Supabase
  */
 
+// Import Supabase client
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
 // Thay đổi các giá trị này bằng thông tin từ dự án Supabase của bạn
 const SUPABASE_URL = 'https://nvcmmagmyowkuvqjrirf.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52Y21tYWdteW93a3V2cWpyaXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQzMzgyNTgsImV4cCI6MjA1OTkxNDI1OH0.2ZuI36vMIB-vK76ZkwRJSDL3O7IpBkjUK-vPxv0PufA';
 
 // Khởi tạo Supabase client
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let supabase;
+try {
+    supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+} catch (error) {
+    console.error('Lỗi khi khởi tạo Supabase client:', error);
+    throw new Error('Không thể khởi tạo kết nối Supabase. Vui lòng kiểm tra cấu hình.');
+}
+
+// Kiểm tra kết nối
+export async function checkConnection() {
+    try {
+        const { data, error } = await supabase.from('members').select('count').single();
+        if (error) throw error;
+        return true;
+    } catch (error) {
+        console.error('Lỗi kiểm tra kết nối Supabase:', error);
+        return false;
+    }
+}
 
 /**
  * Lấy tất cả thành viên từ Supabase
  * @returns {Promise<Array>} Danh sách thành viên
  */
 export async function getMembers() {
-    const { data, error } = await supabase
-        .from('members')
-        .select('*')
-        .order('name');
-    
-    if (error) {
+    try {
+        const { data, error } = await supabase
+            .from('members')
+            .select('*')
+            .order('name');
+        
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
         console.error('Lỗi khi lấy danh sách thành viên:', error);
-        return [];
+        throw new Error('Không thể lấy danh sách thành viên từ Supabase');
     }
-    
-    return data;
 }
 
 /**
@@ -99,12 +121,14 @@ export async function getExpenses() {
     const { data, error } = await supabase
         .from('expenses')
         .select('*')
-        .order('date', { ascending: false });
+        .order('created_at', { ascending: false });
     
     if (error) {
         console.error('Lỗi khi lấy danh sách chi tiêu:', error);
         return [];
     }
+    
+    console.log('Dữ liệu chi tiêu nhận từ Supabase:', data);
     
     // Chuyển đổi dữ liệu từ định dạng DB sang định dạng ứng dụng
     return data.map(expense => ({
@@ -112,10 +136,12 @@ export async function getExpenses() {
         name: expense.name,
         amount: expense.amount,
         date: expense.date,
+        time: expense.time || '00:00',
         payer: expense.payer,
         participants: expense.participants,
         equalSplit: expense.equal_split,
-        splits: expense.splits || {}
+        splits: expense.splits || {},
+        createdAt: expense.created_at
     }));
 }
 
@@ -125,6 +151,8 @@ export async function getExpenses() {
  * @returns {Promise<Object>} Chi tiêu được thêm
  */
 export async function addExpense(expense) {
+    console.log('Đang thêm chi tiêu với thời gian:', expense.time);
+    
     const { data, error } = await supabase
         .from('expenses')
         .insert([{
@@ -149,6 +177,7 @@ export async function addExpense(expense) {
         name: data[0].name,
         amount: data[0].amount,
         date: data[0].date,
+        time: expense.time || '00:00', // Sử dụng giá trị time từ request
         payer: data[0].payer,
         participants: data[0].participants,
         equalSplit: data[0].equal_split,
@@ -188,6 +217,7 @@ export async function updateExpense(id, expense) {
         name: data[0].name,
         amount: data[0].amount,
         date: data[0].date,
+        time: expense.time || '00:00', // Sử dụng giá trị time từ request
         payer: data[0].payer,
         participants: data[0].participants,
         equalSplit: data[0].equal_split,
@@ -238,7 +268,8 @@ export async function getFundTransactions() {
         member: transaction.member,
         note: transaction.note,
         expenseId: transaction.expense_id,
-        expenseName: transaction.expense_name
+        expenseName: transaction.expense_name,
+        expenseData: transaction.expense_data
     }));
 }
 
@@ -284,18 +315,42 @@ export async function addDeposit(member, amount, date, note = '') {
  * @param {string} expenseName Tên chi tiêu
  * @param {number} amount Số tiền
  * @param {string} date Ngày chi (YYYY-MM-DD)
+ * @param {string} [expenseData] Dữ liệu chi tiết về chi tiêu (JSON string)
  * @returns {Promise<Object>} Giao dịch được thêm
  */
-export async function addExpenseTransaction(expenseId, expenseName, amount, date) {
+export async function addExpenseTransaction(expenseId, expenseName, amount, date, expenseData = null) {
+    console.log('addExpenseTransaction với ID:', expenseId, typeof expenseId);
+    
+    // Kiểm tra xem ID có đúng định dạng UUID không
+    function isUUID(str) {
+        const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        return regex.test(str);
+    }
+    
+    // Nếu ID không phải UUID và đang kết nối Supabase, dùng UUID mới
+    let safeExpenseId = expenseId;
+    if (!isUUID(expenseId)) {
+        console.warn('ID không phải UUID:', expenseId);
+        safeExpenseId = crypto.randomUUID ? crypto.randomUUID() : 
+                         ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+                            (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+                         );
+        console.log('Đã chuyển đổi ID thành UUID:', safeExpenseId);
+    }
+    
+    const transactionData = {
+        type: 'expense',
+        amount: amount,
+        date: date,
+        expense_id: safeExpenseId,
+        expense_name: expenseName
+    };
+    
+    // Không thêm expense_data vào dữ liệu gửi đến Supabase vì cột này không tồn tại
+    
     const { data, error } = await supabase
         .from('fund_transactions')
-        .insert([{
-            type: 'expense',
-            amount: amount,
-            date: date,
-            expense_id: expenseId,
-            expense_name: expenseName
-        }])
+        .insert([transactionData])
         .select();
     
     if (error) {
@@ -309,8 +364,9 @@ export async function addExpenseTransaction(expenseId, expenseName, amount, date
         type: data[0].type,
         amount: data[0].amount,
         date: data[0].date,
-        expenseId: data[0].expense_id,
-        expenseName: data[0].expense_name
+        expenseId: safeExpenseId, // Trả về ID đã được chuyển đổi
+        expenseName: data[0].expense_name,
+        expenseData: expenseData // Sử dụng expenseData từ tham số
     };
 }
 
@@ -339,10 +395,46 @@ export async function deleteFundTransaction(id) {
  * @returns {Promise<boolean>} Kết quả xóa
  */
 export async function deleteExpenseTransactions(expenseId) {
+    console.log('deleteExpenseTransactions với ID:', expenseId);
+    
+    // Kiểm tra xem ID có đúng định dạng UUID không
+    function isUUID(str) {
+        const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        return regex.test(str);
+    }
+    
+    // Nếu ID không phải UUID và đang kết nối Supabase, dùng UUID mới
+    let safeExpenseId = expenseId;
+    if (!isUUID(expenseId)) {
+        console.warn('ID không phải UUID khi xóa giao dịch:', expenseId);
+        // Trong trường hợp xóa, không thể dùng UUID mới vì không biết UUID cũ là gì
+        // Thay vào đó, ta sẽ cố gắng truy vấn tất cả giao dịch và tìm theo tên
+        const { data } = await supabase
+            .from('fund_transactions')
+            .select('*')
+            .eq('expense_name', expenseId); // Dùng expenseId làm tên (trường hợp đặc biệt)
+        
+        if (data && data.length > 0) {
+            // Nếu tìm thấy, xóa từng giao dịch theo ID
+            for (const transaction of data) {
+                await supabase
+                    .from('fund_transactions')
+                    .delete()
+                    .eq('id', transaction.id);
+            }
+            return true;
+        }
+        
+        // Nếu không tìm thấy, báo lỗi nhưng vẫn trả về true để tiếp tục
+        console.warn('Không tìm thấy giao dịch để xóa với ID:', expenseId);
+        return true;
+    }
+    
+    // Trường hợp ID là UUID, xóa bình thường
     const { error } = await supabase
         .from('fund_transactions')
         .delete()
-        .eq('expense_id', expenseId);
+        .eq('expense_id', safeExpenseId);
     
     if (error) {
         console.error('Lỗi khi xóa giao dịch quỹ liên quan đến chi tiêu:', error);

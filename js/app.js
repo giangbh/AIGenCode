@@ -9,8 +9,9 @@ import { MemberManager } from './controllers/MemberManager.js';
 import { ExpenseUIController } from './controllers/ExpenseUIController.js';
 import { FundUIController } from './controllers/FundUIController.js';
 import { MemberUIController } from './controllers/MemberUIController.js';
-import { initializeStorage, clearAllData, supabase } from './utils/storage.js';
+import { initializeStorage, clearAllData } from './utils/storage.js';
 import { showMessage } from './utils/helpers.js';
+import { checkConnection } from './utils/supabase.js';
 
 class App {
     /**
@@ -37,47 +38,75 @@ class App {
      */
     async init() {
         try {
+            // Show loading indicator
+            const loadingEl = document.createElement('div');
+            loadingEl.className = 'fixed inset-0 flex items-center justify-center bg-white z-50';
+            loadingEl.innerHTML = `
+                <div class="text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                    <p class="mt-4 text-gray-600">Đang kết nối đến Supabase...</p>
+                </div>
+            `;
+            document.body.appendChild(loadingEl);
+
+            // Check Supabase connection
+            const isConnected = await checkConnection();
+            if (!isConnected) {
+                showMessage('Không thể kết nối đến cơ sở dữ liệu Supabase. Vui lòng kiểm tra cấu hình và kết nối internet.', 'error');
+                loadingEl.remove();
+                return;
+            }
+
             // Initialize Supabase with default data
             await initializeStorage(this.defaultMembers, this.defaultBankAccounts);
             
-            // Initialize managers
-            this.memberManager = new MemberManager(this.defaultMembers, this.defaultBankAccounts);
-            this.fundManager = new GroupFundManager();
-            this.expenseManager = new ExpenseManager(this.fundManager);
+            // Initialize and load member data first
+            this.memberManager = new MemberManager();
+            await this.memberManager.loadData();
             
-            // Wait for managers to load data
+            if (!this.memberManager.getAllMembers || this.memberManager.getAllMembers().length === 0) {
+                throw new Error('Không thể tải danh sách thành viên');
+            }
+
+            // Initialize other managers
+            this.expenseManager = new ExpenseManager();
+            this.groupFundManager = new GroupFundManager(this.expenseManager);
+            
+            // Load other managers' data
             await Promise.all([
-                this.memberManager.loadData(),
-                this.fundManager.loadData()
+                this.groupFundManager.loadData()
             ]);
             await this.expenseManager.loadData();
             
             // Make sure member balances are initialized
-            this.fundManager.initializeMemberBalances(this.memberManager.getAllMembers());
+            this.groupFundManager.initializeMemberBalances(this.memberManager.getAllMembers());
             
             // Initialize UI controllers
-            this.expenseUI = new ExpenseUIController(this);
-            this.fundUI = new FundUIController(this);
-            this.memberUI = new MemberUIController(this);
+            this.memberUIController = new MemberUIController(this.memberManager);
+            this.expenseUIController = new ExpenseUIController(this.expenseManager, this.memberManager, this.groupFundManager);
+            this.fundUIController = new FundUIController(this.groupFundManager, this.memberManager);
             
             // Initialize Lucide icons
             lucide.createIcons();
             
             // Initialize UI components
-            this.expenseUI.populateMembers();
+            this.expenseUIController.populateMembers();
             
-            // Thiết lập nút làm mới dữ liệu
+            // Setup refresh button
             this.setupRefreshButton();
-            
-            // Render all components
-            await this.renderAll();
-            
+
+            // Remove loading indicator
+            loadingEl.remove();
+
+            // Make app globally accessible for debugging
+            window.app = this;
+
             // Mark as initialized
             this.initialized = true;
-            console.log('Ứng dụng đã khởi tạo thành công với Supabase');
+            console.log('Ứng dụng đã khởi tạo thành công');
         } catch (error) {
             console.error('Lỗi khi khởi tạo ứng dụng:', error);
-            this._showInitError(error.message);
+            showMessage('Có lỗi xảy ra khi khởi tạo ứng dụng. Vui lòng thử lại sau.', 'error');
         }
     }
     
@@ -89,7 +118,7 @@ class App {
             // Đảm bảo dữ liệu được tải lại từ Supabase
             await Promise.all([
                 this.memberManager.loadData(),
-                this.fundManager.loadData()
+                this.groupFundManager.loadData()
             ]);
             await this.expenseManager.loadData();
             
@@ -101,7 +130,7 @@ class App {
             // Calculate and render expense results
             const members = this.memberManager.getAllMembers();
             const results = this.expenseManager.calculateResults(members);
-            this.expenseUI.renderResults(results);
+            this.expenseUIController.renderResults(results);
         } catch (error) {
             console.error('Lỗi khi làm mới giao diện:', error);
             // Thử render với dữ liệu hiện có
@@ -115,22 +144,22 @@ class App {
      * Render expense-related UI
      */
     renderExpenses() {
-        this.expenseUI.renderExpenseList();
+        this.expenseUIController.renderExpenseList();
     }
     
     /**
      * Render group fund UI
      */
     renderGroupFund() {
-        this.fundUI.renderFundStatus();
-        this.fundUI.renderFundTransactions();
+        this.fundUIController.renderFundStatus();
+        this.fundUIController.renderFundTransactions();
     }
     
     /**
      * Render members UI
      */
     renderMembers() {
-        this.memberUI.renderMembers();
+        this.memberUIController.renderMembers();
     }
     
     /**
@@ -138,7 +167,7 @@ class App {
      * @param {string} member - The member to edit
      */
     handleEditMember(member) {
-        this.memberUI.handleEditMember(member);
+        this.memberUIController.handleEditMember(member);
     }
     
     /**
@@ -146,8 +175,8 @@ class App {
      */
     async clearAllData() {
         clearAllData();
-        this.expenseManager = new ExpenseManager(this.fundManager);
-        await this.fundManager.clearAllData();
+        this.expenseManager = new ExpenseManager();
+        await this.groupFundManager.clearAllData();
         await this.renderAll();
     }
     
@@ -201,46 +230,44 @@ class App {
      * Thiết lập nút làm mới dữ liệu
      */
     setupRefreshButton() {
-        const refreshBtn = document.getElementById('refresh-data-btn');
-        if (refreshBtn) {
-            refreshBtn.addEventListener('click', async () => {
+        const refreshButton = document.getElementById('refresh-data-btn');
+        if (refreshButton) {
+            refreshButton.addEventListener('click', async () => {
+                refreshButton.disabled = true;
+                const originalHTML = refreshButton.innerHTML;
+                refreshButton.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i>';
+                lucide.createIcons({
+                    scope: refreshButton
+                });
+
                 try {
-                    // Hiển thị trạng thái đang làm mới
-                    const originalText = refreshBtn.innerHTML;
-                    refreshBtn.disabled = true;
-                    refreshBtn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 mr-1 animate-spin"></i><span>Đang làm mới...</span>';
-                    lucide.createIcons({
-                        scope: refreshBtn
-                    });
-                    
-                    // Làm mới dữ liệu từ Supabase
+                    // Reload data from Supabase
                     await Promise.all([
                         this.memberManager.loadData(),
-                        this.fundManager.loadData()
+                        this.groupFundManager.loadData()
                     ]);
                     await this.expenseManager.loadData();
-                    
-                    // Cập nhật giao diện
-                    await this.renderAll();
-                    
-                    // Thông báo thành công
-                    showMessage('Dữ liệu đã được cập nhật từ Supabase');
-                    
-                    // Khôi phục trạng thái nút
-                    refreshBtn.disabled = false;
-                    refreshBtn.innerHTML = originalText;
-                    lucide.createIcons({
-                        scope: refreshBtn
-                    });
+
+                    // Update UI with new data
+                    this.expenseUIController.renderExpenseList();
+                    this.fundUIController.renderFundStatus();
+                    this.fundUIController.renderFundTransactions();
+                    this.memberUIController.renderMembers();
+
+                    // Calculate and render expense results
+                    const members = this.memberManager.getAllMembers();
+                    const results = this.expenseManager.calculateResults(members);
+                    this.expenseUIController.renderResults(results);
+
+                    showMessage('Dữ liệu đã được làm mới');
                 } catch (error) {
                     console.error('Lỗi khi làm mới dữ liệu:', error);
-                    showMessage('Lỗi khi làm mới dữ liệu', 'error');
-                    
-                    // Khôi phục trạng thái nút
-                    refreshBtn.disabled = false;
-                    refreshBtn.innerHTML = '<i data-lucide="refresh-cw" class="w-4 h-4 mr-1"></i><span>Làm mới dữ liệu</span>';
+                    showMessage('Có lỗi xảy ra khi làm mới dữ liệu', 'error');
+                } finally {
+                    refreshButton.disabled = false;
+                    refreshButton.innerHTML = originalHTML;
                     lucide.createIcons({
-                        scope: refreshBtn
+                        scope: refreshButton
                     });
                 }
             });
@@ -248,26 +275,8 @@ class App {
     }
 }
 
-// Initialize and start the application when DOM is loaded
-document.addEventListener('DOMContentLoaded', async () => {
-    // Show loading indicator
-    const loadingEl = document.createElement('div');
-    loadingEl.className = 'fixed inset-0 flex items-center justify-center bg-white z-50';
-    loadingEl.innerHTML = `
-        <div class="text-center">
-            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-            <p class="mt-4 text-gray-600">Đang kết nối đến Supabase...</p>
-        </div>
-    `;
-    document.body.appendChild(loadingEl);
-    
-    // Initialize app
+// Start the app when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
     const app = new App();
-    await app.init();
-    
-    // Remove loading indicator
-    loadingEl.remove();
-    
-    // Make app globally accessible for debugging
-    window.app = app;
+    app.init();
 }); 

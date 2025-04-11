@@ -11,10 +11,27 @@ export const CURRENCY_FORMATTER = new Intl.NumberFormat('vi-VN', {
 export const INPUT_AMOUNT_FORMATTER = new Intl.NumberFormat('vi-VN');
 
 /**
+ * Generate a UUID v4
+ * @returns {string} A UUID v4 string
+ */
+export const generateUUID = () => {
+    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
+};
+
+/**
  * Generate a random ID for new items
  * @returns {string} A unique random ID
  */
-export const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
+export const generateId = () => {
+    // Sử dụng UUID nếu yêu cầu Supabase dùng UUID
+    if (window.location.hostname !== 'localhost') {
+        return generateUUID();
+    }
+    // Dùng ID ngẫu nhiên khi phát triển local
+    return '_' + Math.random().toString(36).substr(2, 9);
+};
 
 /**
  * Format a number as currency
@@ -96,6 +113,23 @@ export const formatDisplayDate = (isoDate) => {
     const parts = isoDate.split('-');
     if (parts.length !== 3) return isoDate;
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
+};
+
+/**
+ * Format a datetime string for display (YYYY-MM-DD HH:MM:SS to DD/MM/YYYY HH:MM)
+ * @param {string} datetime - Datetime in YYYY-MM-DD HH:MM:SS format
+ * @returns {string} Formatted datetime for display
+ */
+export const formatDisplayDateTime = (datetime) => {
+    if (!datetime) return '';
+    
+    const parts = datetime.split(' ');
+    if (parts.length !== 2) return formatDisplayDate(datetime);
+    
+    const datePart = formatDisplayDate(parts[0]);
+    const timePart = parts[1].substring(0, 5); // Extract HH:MM from HH:MM:SS
+    
+    return `${datePart} ${timePart}`;
 };
 
 /**

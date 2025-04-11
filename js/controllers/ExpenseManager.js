@@ -65,38 +65,30 @@ export class ExpenseManager {
     /**
      * Add a new expense
      * @param {Object} expenseData - The expense data
-     * @returns {Expense} The newly created expense
+     * @returns {Promise<Expense>} The newly created expense
      */
     async addExpense(expenseData) {
-        // Check if fund has enough balance when it's the payer
-        if (expenseData.payer === this.GROUP_FUND_PAYER_ID) {
-            const fundBalance = this.fundManager.getBalance();
-            if (expenseData.amount > fundBalance) {
-                throw new Error(`Số dư quỹ nhóm không đủ để chi trả khoản này. Số dư hiện tại: ${formatCurrency(fundBalance)}`);
-            }
+        console.log('ExpenseManager.addExpense - thời gian:', expenseData.time);
+        
+        // Create a new expense locally
+        const expense = new Expense(expenseData);
+        
+        // Handle special case when payer is Group Fund
+        if (expense.payer === this.GROUP_FUND_PAYER_ID) {
+            // Handle payment from group fund
+            await this._handleGroupFundPayment(expense);
         }
         
-        try {
-            // Add expense to Supabase
-            const savedExpense = await supabase.addExpense(expenseData);
-            
-            // Create new expense
-            const expense = Expense.fromObject(savedExpense);
-            this.expenses.push(expense);
-            
-            // If group fund is the payer, update fund balance
-            if (expense.payer === this.GROUP_FUND_PAYER_ID) {
-                await this._handleGroupFundPayment(expense);
-            }
-            
-            // Invalidate cache
-            invalidateCache('expenses');
-            
-            return expense;
-        } catch (error) {
-            console.error('Lỗi khi thêm chi tiêu:', error);
-            throw error;
-        }
+        // Add to Supabase
+        const addedExpense = await supabase.addExpense(expense.toObject());
+        
+        // Add to local storage
+        this.expenses.push(Expense.fromObject(addedExpense));
+        
+        // Invalidate cache
+        invalidateCache('expenses');
+        
+        return expense;
     }
     
     /**
@@ -317,32 +309,55 @@ export class ExpenseManager {
      * @param {Expense} expense - The expense
      */
     async _handleGroupFundPayment(expense) {
-        // Create fund transaction for this expense
-        const transaction = FundTransaction.createExpense(
-            expense.id,
-            expense.name,
-            expense.amount,
-            expense.date
-        );
-        
-        // Calculate member balances
-        const memberBalances = {};
-        
-        if (expense.equalSplit) {
-            // Equal split case
-            const splitAmount = expense.amount / expense.participants.length;
-            expense.participants.forEach(participant => {
-                memberBalances[participant] = -splitAmount;
+        try {
+            // Calculate member balances
+            const memberBalances = {};
+            
+            if (expense.equalSplit) {
+                // Equal split case
+                const splitAmount = expense.amount / expense.participants.length;
+                expense.participants.forEach(participant => {
+                    memberBalances[participant] = -splitAmount;
+                });
+            } else {
+                // Manual split case
+                Object.entries(expense.splits).forEach(([participant, splitAmount]) => {
+                    memberBalances[participant] = -splitAmount;
+                });
+            }
+            
+            // Chuẩn bị dữ liệu chi tiết cho giao dịch
+            const expenseData = JSON.stringify({
+                balanceChanges: memberBalances,
+                participants: expense.participants,
+                equalSplit: expense.equalSplit,
+                splits: expense.splits || {}
             });
-        } else {
-            // Manual split case
-            Object.entries(expense.splits).forEach(([participant, splitAmount]) => {
-                memberBalances[participant] = -splitAmount;
-            });
+            
+            console.log('Xử lý chi tiêu từ quỹ với ID:', expense.id);
+            
+            // Create fund transaction for this expense
+            const transaction = FundTransaction.createExpense(
+                expense.id,
+                expense.name,
+                expense.amount,
+                expense.date
+            );
+            
+            // Thêm dữ liệu phân bổ vào transaction
+            transaction.expenseData = expenseData;
+            
+            // Update fund (decreases fund balance and adjusts member balances)
+            await this.fundManager.addTransaction(transaction, memberBalances);
+            
+            // Đảm bảo cập nhật lại số dư thành viên
+            await this.fundManager.recalculateMemberBalances();
+            
+            console.log("Đã cập nhật số dư thành viên sau khi chi tiêu từ quỹ:", memberBalances);
+        } catch (error) {
+            console.error("Lỗi khi xử lý thanh toán từ quỹ nhóm:", error);
+            throw error;
         }
-        
-        // Update fund (decreases fund balance and adjusts member balances)
-        await this.fundManager.addTransaction(transaction, memberBalances);
     }
     
     /**
@@ -351,22 +366,32 @@ export class ExpenseManager {
      * @param {Expense} expense - The expense that was paid by the fund
      */
     async _handleGroupFundRefund(expense) {
-        // We need to update member balances to remove the expense
-        const memberBalances = {};
-        
-        if (expense.equalSplit) {
-            const splitAmount = expense.amount / expense.participants.length;
-            expense.participants.forEach(participant => {
-                memberBalances[participant] = splitAmount; // Positive to remove negative
-            });
-        } else {
-            Object.entries(expense.splits).forEach(([participant, splitAmount]) => {
-                memberBalances[participant] = splitAmount; // Positive to remove negative
-            });
+        try {
+            // We need to update member balances to remove the expense
+            const memberBalances = {};
+            
+            if (expense.equalSplit) {
+                const splitAmount = expense.amount / expense.participants.length;
+                expense.participants.forEach(participant => {
+                    memberBalances[participant] = splitAmount; // Positive to remove negative
+                });
+            } else {
+                Object.entries(expense.splits).forEach(([participant, splitAmount]) => {
+                    memberBalances[participant] = splitAmount; // Positive to remove negative
+                });
+            }
+            
+            // Delete any fund transaction associated with this expense
+            await this.fundManager.removeExpenseTransaction(expense.id, memberBalances);
+            
+            // Đảm bảo cập nhật lại số dư thành viên
+            await this.fundManager.recalculateMemberBalances();
+            
+            console.log("Đã cập nhật số dư thành viên sau khi hoàn trả quỹ:", memberBalances);
+        } catch (error) {
+            console.error("Lỗi khi hoàn trả tiền vào quỹ nhóm:", error);
+            throw error;
         }
-        
-        // Delete any fund transaction associated with this expense
-        await this.fundManager.removeExpenseTransaction(expense.id);
     }
     
     /**
@@ -376,16 +401,63 @@ export class ExpenseManager {
      * @param {Object} newData - The updated expense data
      */
     async _handleGroupFundUpdate(oldExpense, newData) {
-        // First refund the old expense
-        await this._handleGroupFundRefund(oldExpense);
+        try {
+            // First refund the old expense
+            await this._handleGroupFundRefund(oldExpense);
+            
+            // Then create a new expense with the new data
+            const tempExpense = new Expense({
+                ...newData,
+                id: oldExpense.id
+            });
+            
+            // Handle payment with new amount
+            await this._handleGroupFundPayment(tempExpense);
+            
+            // Đảm bảo cập nhật lại số dư thành viên
+            await this.fundManager.recalculateMemberBalances();
+            
+            console.log("Đã cập nhật số dư thành viên sau khi cập nhật chi tiêu từ quỹ");
+        } catch (error) {
+            console.error("Lỗi khi cập nhật chi tiêu từ quỹ nhóm:", error);
+            throw error;
+        }
+    }
+
+    /**
+     * Calculate distribution of an expense among members
+     * @param {Expense} expense - The expense to calculate distribution for
+     * @param {Array<string>} members - List of all members
+     * @returns {Object} Distribution map of member to amount
+     */
+    calculateExpenseDistribution(expense, members) {
+        const distribution = {};
+        const totalAmount = expense.amount;
         
-        // Then create a new expense with the new data
-        const tempExpense = new Expense({
-            ...newData,
-            id: oldExpense.id
-        });
+        if (expense.payer === this.GROUP_FUND_PAYER_ID) {
+            // If paid from group fund, distribute equally
+            const equalShare = totalAmount / members.length;
+            members.forEach(member => {
+                distribution[member] = equalShare;
+            });
+        } else {
+            // If paid by a member, that member gets the full amount
+            distribution[expense.payer] = totalAmount;
+        }
         
-        // Handle payment with new amount
-        await this._handleGroupFundPayment(tempExpense);
+        return distribution;
+    }
+
+    /**
+     * Update expense distribution and notify GroupFundManager
+     * @param {string} expenseId - ID of the expense to update
+     * @param {Object} newDistribution - New distribution map
+     */
+    async updateExpenseDistribution(expenseId, newDistribution) {
+        const expense = this.getExpenseById(expenseId);
+        if (expense) {
+            expense.distribution = newDistribution;
+            await this.updateExpense(expenseId, { distribution: newDistribution });
+        }
     }
 } 

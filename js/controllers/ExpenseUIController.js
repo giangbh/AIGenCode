@@ -38,6 +38,11 @@ export class ExpenseUIController extends UIController {
         // State
         this.editingExpenseId = null;
         
+        // Pagination for expenses
+        this.currentPage = 1;
+        this.expensesPerPage = 5;
+        this.totalExpenses = 0;
+        
         // Initialize UI
         this.initUI();
     }
@@ -261,11 +266,13 @@ export class ExpenseUIController extends UIController {
     }
     
     /**
-     * Render expense list
+     * Render expense list with pagination
+     * @param {number} [page=1] - Page number to display
      */
-    renderExpenseList() {
+    renderExpenseList(page = 1) {
         this.expenseList.innerHTML = '';
         const expenses = this.app.expenseManager.getAllExpenses();
+        this.totalExpenses = expenses.length;
         
         if (expenses.length === 0) {
             this.noExpensesMessage.classList.remove('hidden');
@@ -274,12 +281,27 @@ export class ExpenseUIController extends UIController {
         
         this.noExpensesMessage.classList.add('hidden');
         
-        // Sort expenses by date, most recent first
-        const sortedExpenses = [...expenses].sort((a, b) => new Date(b.date) - new Date(a.date));
+        // Dữ liệu đã được sắp xếp theo created_at từ Supabase
+        // nên chúng ta không cần sắp xếp lại, chỉ dùng lại để đảm bảo
+        const sortedExpenses = [...expenses];
         
-        sortedExpenses.forEach(expense => {
+        // Calculate pagination
+        this.currentPage = page;
+        const totalPages = Math.ceil(sortedExpenses.length / this.expensesPerPage);
+        
+        // Adjust current page if needed
+        if (this.currentPage < 1) this.currentPage = 1;
+        if (this.currentPage > totalPages) this.currentPage = totalPages;
+        
+        // Get current page expenses
+        const startIndex = (this.currentPage - 1) * this.expensesPerPage;
+        const endIndex = Math.min(startIndex + this.expensesPerPage, sortedExpenses.length);
+        const currentExpenses = sortedExpenses.slice(startIndex, endIndex);
+        
+        // Render current page expenses
+        currentExpenses.forEach(expense => {
             const card = document.createElement('div');
-            card.className = 'bg-white rounded-lg shadow-md p-4';
+            card.className = 'bg-white rounded-lg shadow-md p-4 mb-3';
             card.dataset.expenseId = expense.id;
             
             const header = document.createElement('div');
@@ -293,7 +315,21 @@ export class ExpenseUIController extends UIController {
             
             const date = document.createElement('p');
             date.className = 'text-sm text-gray-500';
-            date.textContent = formatDisplayDate(expense.date);
+            
+            // Format date and time from created_at if available
+            if (expense.createdAt) {
+                const createdDate = new Date(expense.createdAt);
+                const formattedDate = `${createdDate.getDate().toString().padStart(2, '0')}/${(createdDate.getMonth()+1).toString().padStart(2, '0')}/${createdDate.getFullYear()}`;
+                const formattedTime = `${createdDate.getHours().toString().padStart(2, '0')}:${createdDate.getMinutes().toString().padStart(2, '0')}`;
+                date.textContent = `${formattedDate} ${formattedTime}`;
+                console.log(`Hiển thị chi tiêu: ${expense.name}, thời gian: ${formattedDate} ${formattedTime}`);
+            } else {
+                // Fallback to date and time fields if created_at is not available
+                const formattedDate = formatDisplayDate(expense.date);
+                const formattedTime = expense.time || this.getCurrentTime();
+                date.textContent = `${formattedDate} ${formattedTime}`;
+                console.log(`Hiển thị chi tiêu: ${expense.name}, thời gian (fallback): ${formattedDate} ${formattedTime}`);
+            }
             
             titleDate.appendChild(title);
             titleDate.appendChild(date);
@@ -348,12 +384,96 @@ export class ExpenseUIController extends UIController {
             this.expenseList.appendChild(card);
         });
         
+        // Add pagination controls if needed
+        if (totalPages > 1) {
+            this.renderExpensePagination(totalPages);
+        }
+        
         // Initialize icons for the newly created buttons
         lucide.createIcons({
             attrs: {
                 class: 'w-4 h-4'
             }
         });
+    }
+    
+    /**
+     * Render pagination controls for expense list
+     * @param {number} totalPages - Total number of pages
+     */
+    renderExpensePagination(totalPages) {
+        const paginationContainer = document.createElement('div');
+        paginationContainer.className = 'flex justify-center items-center mt-4 space-x-2';
+        
+        // First page button
+        const firstButton = document.createElement('button');
+        firstButton.className = 'px-3 py-1 bg-gray-200 rounded-md text-gray-700 hover:bg-gray-300';
+        firstButton.textContent = '««';
+        firstButton.disabled = this.currentPage === 1;
+        if (this.currentPage > 1) {
+            firstButton.addEventListener('click', () => this.renderExpenseList(1));
+        } else {
+            firstButton.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+        
+        // Previous page button
+        const prevButton = document.createElement('button');
+        prevButton.className = 'px-3 py-1 bg-gray-200 rounded-md text-gray-700 hover:bg-gray-300';
+        prevButton.textContent = '«';
+        prevButton.disabled = this.currentPage === 1;
+        if (this.currentPage > 1) {
+            prevButton.addEventListener('click', () => this.renderExpenseList(this.currentPage - 1));
+        } else {
+            prevButton.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+        
+        // Page info
+        const pageInfo = document.createElement('span');
+        pageInfo.className = 'text-sm text-gray-600';
+        pageInfo.textContent = `Trang ${this.currentPage} / ${totalPages}`;
+        
+        // Next page button
+        const nextButton = document.createElement('button');
+        nextButton.className = 'px-3 py-1 bg-gray-200 rounded-md text-gray-700 hover:bg-gray-300';
+        nextButton.textContent = '»';
+        nextButton.disabled = this.currentPage === totalPages;
+        if (this.currentPage < totalPages) {
+            nextButton.addEventListener('click', () => this.renderExpenseList(this.currentPage + 1));
+        } else {
+            nextButton.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+        
+        // Last page button
+        const lastButton = document.createElement('button');
+        lastButton.className = 'px-3 py-1 bg-gray-200 rounded-md text-gray-700 hover:bg-gray-300';
+        lastButton.textContent = '»»';
+        lastButton.disabled = this.currentPage === totalPages;
+        if (this.currentPage < totalPages) {
+            lastButton.addEventListener('click', () => this.renderExpenseList(totalPages));
+        } else {
+            lastButton.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+        
+        paginationContainer.appendChild(firstButton);
+        paginationContainer.appendChild(prevButton);
+        paginationContainer.appendChild(pageInfo);
+        paginationContainer.appendChild(nextButton);
+        paginationContainer.appendChild(lastButton);
+        
+        this.expenseList.appendChild(paginationContainer);
+    }
+    
+    /**
+     * Get the current time in HH:MM format
+     * @returns {string} Current time in HH:MM format
+     */
+    getCurrentTime() {
+        const now = new Date();
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const currentTime = `${hours}:${minutes}`;
+        console.log('Thời gian hiện tại:', currentTime);
+        return currentTime;
     }
     
     /**
@@ -366,6 +486,8 @@ export class ExpenseUIController extends UIController {
         const name = this.expenseNameInput.value.trim();
         const amount = parseFormattedAmount(this.expenseAmountInput.value);
         const date = this.expenseDateInput.value;
+        const time = this.getCurrentTime(); // Luôn sử dụng thời gian hiện tại
+        console.log('Sử dụng thời gian khi thêm chi tiêu:', time);
         const payer = this.payerSelect.value;
         const participants = this.getSelectedParticipants();
         
@@ -399,6 +521,7 @@ export class ExpenseUIController extends UIController {
                     name,
                     amount,
                     date,
+                    time,
                     payer,
                     participants,
                     equalSplit,
@@ -412,12 +535,14 @@ export class ExpenseUIController extends UIController {
                     name,
                     amount,
                     date,
+                    time,
                     payer,
                     participants,
                     equalSplit,
                     splits: equalSplit ? {} : splits,
                 });
                 
+                console.log(`Chi tiêu mới được thêm: ${name}, ngày: ${date}, thời gian: ${time}`);
                 showMessage('Chi tiêu mới đã được thêm');
             }
             
@@ -584,25 +709,23 @@ export class ExpenseUIController extends UIController {
      * Reset the expense form
      */
     resetForm() {
-        // Reset expense form
         this.expenseForm.reset();
-        this.editingExpenseId = null; 
+        this.expenseDateInput.value = getTodayDateString();
+        
+        this.expenseAmountInput.value = '';
+        this.editingExpenseId = null;
         this.editExpenseIdInput.value = '';
-        this.formTitle.textContent = 'Thêm chi tiêu mới'; 
+        
+        // Reset UI elements
+        this.formTitle.textContent = 'Thêm chi tiêu mới';
         this.saveBtnText.textContent = 'Lưu chi tiêu';
-        this.saveExpenseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600'); 
+        this.saveExpenseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
         this.saveExpenseBtn.classList.add('bg-green-600', 'hover:bg-green-700');
         this.cancelEditBtn.classList.add('hidden');
-        this.expenseDateInput.value = getTodayDateString();
         this.participantsListDiv.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
         this.splitEquallyToggle.checked = true;
-        this.manualSplitSection.classList.add('hidden'); 
-        this.manualSplitInputsDiv.innerHTML = ''; 
-        this.manualSplitError.classList.add('hidden');
-        this.splitEquallyToggle.dispatchEvent(new Event('change'));
-        this.handleParticipantChange();
-        this.expenseAmountInput.value = '';
         this.updateToggleAllButtonState();
+        this.manualSplitSection.classList.add('hidden');
     }
     
     /**

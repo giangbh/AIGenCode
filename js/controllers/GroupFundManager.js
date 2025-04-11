@@ -4,16 +4,18 @@
  */
 
 import { FundTransaction } from '../models/FundTransaction.js';
-import { loadFundTransactions, invalidateCache, supabase } from '../utils/storage.js';
+import { formatCurrency, formatDisplayDate, showMessage } from '../utils/helpers.js';
+import { loadFundTransactions, saveFundTransactions, invalidateCache, supabase } from '../utils/storage.js';
 
 export class GroupFundManager {
     /**
      * Create a new GroupFundManager
      */
-    constructor() {
+    constructor(expenseManager) {
         this.balance = 0;
         this.transactions = [];
         this.memberBalances = {};
+        this.expenseManager = expenseManager;
         
         // Load data
         this.loadData();
@@ -160,7 +162,8 @@ export class GroupFundManager {
                     transaction.expenseId,
                     transaction.expenseName,
                     transaction.amount,
-                    transaction.date
+                    transaction.date,
+                    transaction.expenseData
                 );
             }
             
@@ -256,52 +259,68 @@ export class GroupFundManager {
     }
     
     /**
-     * Recalculate member balances from transactions
-     * @param {Array<string>} [members] - Optional list of members to ensure in balances
+     * Recalculate member balances based on transactions
+     * @param {Array<string>} members - List of members
      */
-    recalculateMemberBalances(members = []) {
-        // Reset balances
-        this.memberBalances = {};
+    async recalculateMemberBalances(members = []) {
+        // Initialize balances
+        this.initializeMemberBalances(members);
         
-        // Initialize members
-        members.forEach(member => {
-            this.memberBalances[member] = 0;
-        });
-        
-        // Calculate balances from transactions
-        this.transactions.forEach(transaction => {
-            if (transaction.isDeposit() && transaction.member) {
-                // Add deposit to member balance
-                this.memberBalances[transaction.member] = 
-                    (this.memberBalances[transaction.member] || 0) + transaction.amount;
-            } 
-            else if (transaction.isExpense() && transaction.expenseData) {
-                // For expenses, distribute costs according to the expense data
-                try {
-                    const expenseData = JSON.parse(transaction.expenseData);
-                    if (expenseData && expenseData.balanceChanges) {
-                        Object.entries(expenseData.balanceChanges).forEach(([member, change]) => {
-                            this.memberBalances[member] = 
-                                (this.memberBalances[member] || 0) + change;
-                        });
+        // Process each transaction
+        for (const transaction of this.transactions) {
+            if (transaction.type === FundTransaction.TYPES.DEPOSIT) {
+                // For deposits, simply add to member's balance
+                this.memberBalances[transaction.member] += transaction.amount;
+            } else if (transaction.type === FundTransaction.TYPES.EXPENSE) {
+                // For expenses, we need to get the expense details
+                const expenseId = transaction.expenseId;
+                if (expenseId) {
+                    try {
+                        // Get expense details from ExpenseManager
+                        const expense = await this.expenseManager.getExpenseById(expenseId);
+                        if (expense) {
+                            // Update balances based on expense distribution
+                            const distribution = expense.distribution || {};
+                            for (const [member, amount] of Object.entries(distribution)) {
+                                if (this.memberBalances.hasOwnProperty(member)) {
+                                    this.memberBalances[member] -= amount;
+                                }
+                            }
+                        } else {
+                            console.warn('Không tìm thấy dữ liệu phân bổ chi tiêu cho:', transaction);
+                            // If expense not found, distribute equally among all members
+                            const equalShare = transaction.amount / members.length;
+                            for (const member of members) {
+                                this.memberBalances[member] -= equalShare;
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Lỗi khi tìm kiếm chi tiêu:', error);
+                        // Fallback to equal distribution if there's an error
+                        const equalShare = transaction.amount / members.length;
+                        for (const member of members) {
+                            this.memberBalances[member] -= equalShare;
+                        }
                     }
-                } catch (error) {
-                    console.error('Lỗi khi phân tích dữ liệu chi tiêu:', error);
                 }
             }
-        });
+        }
+        
+        console.log('Số dư thành viên sau khi tính toán lại:', this.memberBalances);
     }
     
     /**
-     * Clear all fund data
+     * Xóa toàn bộ dữ liệu quỹ
      */
     async clearAllData() {
-        this.balance = 0;
-        this.transactions = [];
-        this.memberBalances = {};
-        
-        // No need to save, as balances are calculated from transactions now
-        // and all transactions have been deleted from Supabase
-        invalidateCache('fundTransactions');
+        try {
+            await supabase.clearAllFundTransactions();
+            this.balance = 0;
+            this.transactions = [];
+            this.memberBalances = {};
+            invalidateCache('fundTransactions');
+        } catch (error) {
+            console.error('Lỗi khi xóa dữ liệu quỹ:', error);
+        }
     }
 } 

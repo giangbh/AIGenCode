@@ -42,7 +42,16 @@ export class UIController {
                     content.classList.remove('active');
                 });
                 
-                document.getElementById(`tab-content-${targetTab}`).classList.add('active');
+                // Map tab IDs to content IDs (handling special cases)
+                let contentId = `tab-content-${targetTab}`;
+                if (targetTab === 'group-fund') {
+                    contentId = 'tab-content-fund';
+                }
+                
+                const tabContent = document.getElementById(contentId);
+                if (tabContent) {
+                    tabContent.classList.add('active');
+                }
                 
                 // Re-render specific tab content
                 if (targetTab === 'expenses') {

@@ -11,6 +11,20 @@ let expensesCache = null;
 let fundTransactionsCache = null;
 let membersCache = null;
 
+// Cache object cho local storage
+const cache = {
+    data: {},
+    get(key) {
+        return this.data[key];
+    },
+    set(key, value) {
+        this.data[key] = value;
+    }
+};
+
+// Keys cho local storage
+const LOCAL_EXPENSES_KEY = 'cafe-thu6-expenses';
+
 /**
  * Khởi tạo bộ nhớ
  * @param {Array} defaultMembers - Danh sách thành viên mặc định
@@ -25,28 +39,36 @@ export async function initializeStorage(defaultMembers, defaultBankAccounts) {
 }
 
 /**
- * Lưu danh sách chi tiêu
- * @param {Array} expenses - Danh sách chi tiêu
- */
-export async function saveExpenses(expenses) {
-    expensesCache = [...expenses];
-    // Không cần làm gì, vì chúng ta sẽ sử dụng hàm CRUD trực tiếp
-}
-
-/**
  * Tải danh sách chi tiêu
  * @returns {Array} Danh sách chi tiêu
  */
 export async function loadExpenses() {
     try {
         if (!expensesCache) {
-            expensesCache = await supabaseClient.getExpenses();
+            const expenses = await supabaseClient.getExpenses();
+            console.log('loadExpenses từ Supabase - Số chi tiêu:', expenses.length);
+            
+            // Log để kiểm tra thời gian
+            expenses.forEach(expense => {
+                console.log('Chi tiêu từ Supabase:', expense.name, 'thời gian:', expense.time);
+            });
+            
+            expensesCache = expenses;
         }
         return expensesCache;
     } catch (error) {
         console.error('Lỗi khi tải chi tiêu:', error);
         return [];
     }
+}
+
+/**
+ * Lưu danh sách chi tiêu
+ * @param {Array} expenses - Danh sách chi tiêu
+ */
+export async function saveExpenses(expenses) {
+    expensesCache = [...expenses];
+    // Không cần làm gì, vì chúng ta sẽ sử dụng hàm CRUD trực tiếp
 }
 
 /**
@@ -59,17 +81,21 @@ export async function saveFundTransactions(transactions) {
 }
 
 /**
- * Tải danh sách giao dịch quỹ
- * @returns {Array} Danh sách giao dịch
+ * Load fund transactions from Supabase
+ * @returns {Promise<Array>} Array of fund transactions
  */
 export async function loadFundTransactions() {
-    try {
-        if (!fundTransactionsCache) {
-            fundTransactionsCache = await supabaseClient.getFundTransactions();
-        }
+    if (fundTransactionsCache && !fundTransactionsCache.invalidated) {
         return fundTransactionsCache;
+    }
+    
+    try {
+        const transactions = await supabaseClient.getFundTransactions();
+        fundTransactionsCache = transactions;
+        fundTransactionsCache.invalidated = false;
+        return transactions;
     } catch (error) {
-        console.error('Lỗi khi tải giao dịch quỹ:', error);
+        console.error('Lỗi khi tải dữ liệu giao dịch quỹ:', error);
         return [];
     }
 }

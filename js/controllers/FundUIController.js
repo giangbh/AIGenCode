@@ -4,7 +4,7 @@
  */
 
 import { UIController } from './UIController.js';
-import { formatCurrency, formatAmountInput, parseFormattedAmount, getTodayDateString, showMessage } from '../utils/helpers.js';
+import { formatCurrency, formatAmountInput, parseFormattedAmount, getTodayDateString, showMessage, formatDisplayDate, formatDisplayDateTime } from '../utils/helpers.js';
 
 export class FundUIController extends UIController {
     /**
@@ -28,6 +28,11 @@ export class FundUIController extends UIController {
         
         // Chart
         this.fundPieChart = null;
+        
+        // Pagination
+        this.currentPage = 1;
+        this.transactionsPerPage = 5; // Hiển thị 5 giao dịch mỗi trang
+        this.totalTransactions = 0;
         
         // Initialize UI
         this.initUI();
@@ -216,12 +221,14 @@ export class FundUIController extends UIController {
     }
     
     /**
-     * Render fund transactions
+     * Render fund transactions with pagination
+     * @param {number} [page=1] - Page number to display
      */
-    renderFundTransactions() {
+    renderFundTransactions(page = 1) {
         if (!this.groupFundTransactionsLogDiv) return;
         
         const transactions = this.app.fundManager.getAllTransactions();
+        this.totalTransactions = transactions.length;
         
         if (transactions.length === 0) {
             if (this.noFundTransactionsMessage) {
@@ -239,60 +246,154 @@ export class FundUIController extends UIController {
         }
         this.groupFundTransactionsLogDiv.innerHTML = '';
         
-        // Sort transactions by date, most recent first
-        const sortedTransactions = [...transactions].sort((a, b) => 
-            new Date(b.date) - new Date(a.date)
-        );
+        // Sort transactions by datetime, most recent first
+        const sortedTransactions = [...transactions].sort((a, b) => {
+            // First try to sort by datetime if available
+            if (a.datetime && b.datetime) {
+                return new Date(b.datetime) - new Date(a.datetime);
+            }
+            // Fall back to date sorting
+            return new Date(b.date) - new Date(a.date);
+        });
         
-        sortedTransactions.forEach(transaction => {
+        // Calculate pagination
+        this.currentPage = page;
+        const totalPages = Math.ceil(sortedTransactions.length / this.transactionsPerPage);
+        
+        // Adjust current page if needed
+        if (this.currentPage < 1) this.currentPage = 1;
+        if (this.currentPage > totalPages) this.currentPage = totalPages;
+        
+        // Get current page transactions
+        const startIndex = (this.currentPage - 1) * this.transactionsPerPage;
+        const endIndex = Math.min(startIndex + this.transactionsPerPage, sortedTransactions.length);
+        const currentTransactions = sortedTransactions.slice(startIndex, endIndex);
+        
+        // Render transactions for the current page
+        currentTransactions.forEach(transaction => {
             const item = document.createElement('div');
-            item.className = 'fund-transaction-item';
+            item.className = 'fund-transaction-item mb-4 bg-white p-4 rounded-lg shadow-sm';
             
             const header = document.createElement('div');
-            header.className = 'flex justify-between items-center';
+            header.className = 'flex justify-between items-start mb-2';
             
-            const dateAmount = document.createElement('div');
+            const dateTime = document.createElement('div');
+            dateTime.className = 'text-sm text-gray-500';
+            // Use datetime if available, otherwise fall back to date
+            dateTime.textContent = transaction.datetime ? 
+                formatDisplayDateTime(transaction.datetime) : 
+                formatDisplayDate(transaction.date);
             
-            const date = document.createElement('span');
-            date.className = 'text-xs text-gray-500';
+            const amount = document.createElement('div');
+            amount.className = transaction.isDeposit() ? 
+                'text-lg font-bold text-green-600' : 
+                'text-lg font-bold text-red-600';
+            amount.textContent = transaction.isDeposit() ? 
+                `+${formatCurrency(transaction.amount)}` : 
+                `-${formatCurrency(transaction.amount)}`;
             
-            // Format date from YYYY-MM-DD to DD/MM/YYYY
-            const dateParts = transaction.date.split('-');
-            date.textContent = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+            header.appendChild(dateTime);
+            header.appendChild(amount);
             
-            const amount = document.createElement('span');
-            amount.className = transaction.isDeposit() ? 'ml-2 text-green-600 font-medium' : 'ml-2 text-red-600 font-medium';
-            amount.textContent = `${transaction.isDeposit() ? '+' : '-'} ${formatCurrency(transaction.amount)}`;
-            
-            dateAmount.appendChild(date);
-            dateAmount.appendChild(amount);
-            
-            header.appendChild(dateAmount);
-            
-            const description = document.createElement('p');
-            description.className = 'text-sm text-gray-700';
+            const content = document.createElement('div');
             
             if (transaction.isDeposit()) {
-                description.textContent = `${transaction.member} đã nộp tiền vào quỹ`;
+                const depositInfo = document.createElement('p');
+                depositInfo.className = 'text-gray-800';
+                depositInfo.textContent = `${transaction.member} đã nộp quỹ`;
+                
                 if (transaction.note) {
-                    description.textContent += ` (${transaction.note})`;
+                    const note = document.createElement('p');
+                    note.className = 'text-sm text-gray-500 mt-1';
+                    note.textContent = `Ghi chú: ${transaction.note}`;
+                    content.appendChild(depositInfo);
+                    content.appendChild(note);
+                } else {
+                    content.appendChild(depositInfo);
                 }
             } else if (transaction.isExpense()) {
-                description.textContent = `Quỹ chi trả cho "${transaction.expenseName}"`;
+                const expenseInfo = document.createElement('p');
+                expenseInfo.className = 'text-gray-800';
+                expenseInfo.textContent = `Chi tiêu: ${transaction.expenseName || 'Không có tên'}`;
+                content.appendChild(expenseInfo);
             }
             
             item.appendChild(header);
-            item.appendChild(description);
+            item.appendChild(content);
             
             this.groupFundTransactionsLogDiv.appendChild(item);
         });
         
-        // Apply Lucide icons to any new elements
-        lucide.createIcons({
-            attrs: {
-                class: 'w-4 h-4'
-            }
-        });
+        // Add pagination controls if needed
+        if (totalPages > 1) {
+            this.renderPaginationControls(totalPages);
+        }
+    }
+    
+    /**
+     * Render pagination controls
+     * @param {number} totalPages - Total number of pages
+     */
+    renderPaginationControls(totalPages) {
+        const paginationContainer = document.createElement('div');
+        paginationContainer.className = 'flex justify-center items-center mt-4 space-x-2';
+        
+        // First page button
+        const firstButton = document.createElement('button');
+        firstButton.className = 'px-3 py-1 bg-gray-200 rounded-md text-gray-700 hover:bg-gray-300';
+        firstButton.textContent = '««';
+        firstButton.disabled = this.currentPage === 1;
+        if (this.currentPage > 1) {
+            firstButton.addEventListener('click', () => this.renderFundTransactions(1));
+        } else {
+            firstButton.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+        
+        // Previous page button
+        const prevButton = document.createElement('button');
+        prevButton.className = 'px-3 py-1 bg-gray-200 rounded-md text-gray-700 hover:bg-gray-300';
+        prevButton.textContent = '«';
+        prevButton.disabled = this.currentPage === 1;
+        if (this.currentPage > 1) {
+            prevButton.addEventListener('click', () => this.renderFundTransactions(this.currentPage - 1));
+        } else {
+            prevButton.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+        
+        // Page info
+        const pageInfo = document.createElement('span');
+        pageInfo.className = 'text-sm text-gray-600';
+        pageInfo.textContent = `Trang ${this.currentPage} / ${totalPages}`;
+        
+        // Next page button
+        const nextButton = document.createElement('button');
+        nextButton.className = 'px-3 py-1 bg-gray-200 rounded-md text-gray-700 hover:bg-gray-300';
+        nextButton.textContent = '»';
+        nextButton.disabled = this.currentPage === totalPages;
+        if (this.currentPage < totalPages) {
+            nextButton.addEventListener('click', () => this.renderFundTransactions(this.currentPage + 1));
+        } else {
+            nextButton.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+        
+        // Last page button
+        const lastButton = document.createElement('button');
+        lastButton.className = 'px-3 py-1 bg-gray-200 rounded-md text-gray-700 hover:bg-gray-300';
+        lastButton.textContent = '»»';
+        lastButton.disabled = this.currentPage === totalPages;
+        if (this.currentPage < totalPages) {
+            lastButton.addEventListener('click', () => this.renderFundTransactions(totalPages));
+        } else {
+            lastButton.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+        
+        paginationContainer.appendChild(firstButton);
+        paginationContainer.appendChild(prevButton);
+        paginationContainer.appendChild(pageInfo);
+        paginationContainer.appendChild(nextButton);
+        paginationContainer.appendChild(lastButton);
+        
+        this.groupFundTransactionsLogDiv.appendChild(paginationContainer);
     }
     
     /**

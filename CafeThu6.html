@@ -20,7 +20,7 @@
                 <i data-lucide="coffee" class="w-8 h-8 mr-2"></i>
                 CafeThu6
             </h1>
-            <p class="text-gray-600">Chia sẻ chi phí nhóm dễ dàng</p>
+            <p class="text-gray-600">Chia sẻ chi phí nhóm dễ dàng XXX</p>
         </header>
 
         <div id="message-box">
@@ -40,9 +40,8 @@
                 </button>
                 
                 <!-- Nút làm mới dữ liệu -->
-                <button id="refresh-data-btn" class="ml-auto px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md flex items-center">
-                    <i data-lucide="refresh-cw" class="w-4 h-4 mr-1"></i>
-                    <span>Làm mới dữ liệu</span>
+                <button id="refresh-data-btn" title="Làm mới dữ liệu" class="ml-auto px-3 py-2 text-sm hover:bg-gray-100 rounded-md flex items-center justify-center">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                 </button>
             </div>
         </nav>
@@ -162,14 +161,14 @@
                 </section>
             </div>
 
-            <div id="tab-content-group-fund" class="tab-content">
+            <div id="tab-content-fund" class="tab-content">
                 <div class="bg-blue-100 py-2 px-4 rounded-md mb-4 text-center">
                     <span class="text-blue-800 font-medium">Đang xem: Quỹ nhóm</span>
                 </div>
-                <section id="group-fund-section" class="p-6 rounded-lg shadow-md mb-8">
-                    <h2 class="text-2xl font-semibold mb-4 text-sky-700 flex items-center">
-                        <i data-lucide="piggy-bank" class="w-6 h-6 mr-2"></i>
-                        Quản lý Quỹ nhóm
+                <section id="fund-section" class="bg-white p-6 rounded-lg shadow-md mb-8">
+                    <h2 class="text-2xl font-semibold mb-4 text-blue-600 flex items-center">
+                        <i data-lucide="wallet" class="w-6 h-6 mr-2"></i>
+                        Quỹ Nhóm
                     </h2>
                     
                     <!-- Balance Card -->
@@ -197,7 +196,7 @@
                                     <i data-lucide="wallet" class="w-4 h-4 mr-1 text-sky-500"></i>
                                     Số dư thành viên
                                 </h4>
-                                <div class="bg-white p-3 rounded border border-gray-200 max-h-40 overflow-y-auto shadow-sm">
+                                <div class="bg-white p-3 rounded border border-gray-200 max-h-80 overflow-y-auto shadow-sm">
                                     <ul id="member-balances-list" class="divide-y divide-gray-100">
                                         <!-- Member balances will be populated here -->
                                     </ul>
@@ -240,9 +239,14 @@
                         </div>
                         <div>
                             <h3 class="text-lg font-semibold mb-2 text-gray-700">Lịch sử giao dịch quỹ</h3>
-                            <div id="group-fund-transactions-log" class="max-h-60 overflow-y-auto bg-white p-3 rounded border border-gray-200 text-sm space-y-2">
+                            <div class="mb-2 flex justify-end space-x-2">
+                                <button id="refresh-fund-data-btn" title="Làm mới dữ liệu" class="bg-blue-500 text-white px-2 py-2 rounded-md text-sm flex items-center justify-center">
+                                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                            <div id="group-fund-transactions-log" class="max-h-96 overflow-y-auto bg-white p-3 rounded border border-gray-200 text-sm space-y-2">
                                 <p id="no-fund-transactions-message" class="text-gray-500 italic">Chưa có giao dịch quỹ nào.</p>
-                                </div>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -276,7 +280,7 @@
 
 
         <footer class="text-center mt-12 text-gray-500 text-sm">
-            <p>Made by Cursor + Claude</p>
+            <p>Made by Giang Bui + Cursor + Claude</p>
             <p>&copy; <span id="copyright-year"></span> CafeThu6. All rights reserved.</p>
         </footer>
     </div>

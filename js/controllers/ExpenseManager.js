@@ -388,4 +388,52 @@ export class ExpenseManager {
         // Handle payment with new amount
         await this._handleGroupFundPayment(tempExpense);
     }
+    
+    /**
+     * Get paginated expenses
+     * @param {number} page - The page number (1-based)
+     * @param {number} perPage - Number of items per page
+     * @param {string} sortBy - Field to sort by
+     * @param {boolean} descending - Whether to sort in descending order
+     * @returns {Object} Pagination result object
+     */
+    getPaginatedExpenses(page = 1, perPage = 5, sortBy = 'date', descending = true) {
+        // Sort expenses
+        const sortedExpenses = [...this.expenses].sort((a, b) => {
+            if (sortBy === 'date') {
+                const dateA = new Date(a.date);
+                const dateB = new Date(b.date);
+                return descending ? dateB - dateA : dateA - dateB;
+            } else if (sortBy === 'amount') {
+                return descending ? b.amount - a.amount : a.amount - b.amount;
+            } else if (sortBy === 'name') {
+                return descending 
+                    ? b.name.localeCompare(a.name) 
+                    : a.name.localeCompare(b.name);
+            }
+            return 0;
+        });
+        
+        // Calculate pagination details
+        const totalItems = sortedExpenses.length;
+        const totalPages = Math.ceil(totalItems / perPage);
+        const currentPage = Math.max(1, Math.min(page, totalPages));
+        
+        // Get items for current page
+        const startIndex = (currentPage - 1) * perPage;
+        const endIndex = Math.min(startIndex + perPage, totalItems);
+        const items = sortedExpenses.slice(startIndex, endIndex);
+        
+        return {
+            items,
+            pagination: {
+                currentPage,
+                perPage,
+                totalItems,
+                totalPages,
+                startIndex,
+                endIndex
+            }
+        };
+    }
 } 

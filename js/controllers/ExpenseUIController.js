@@ -37,6 +37,9 @@ export class ExpenseUIController extends UIController {
         
         // State
         this.editingExpenseId = null;
+        this.currentPage = 1;
+        this.sortField = 'date';
+        this.sortDirection = true; // descending
         
         // Initialize UI
         this.initUI();
@@ -274,56 +277,197 @@ export class ExpenseUIController extends UIController {
         
         this.noExpensesMessage.classList.add('hidden');
         
-        // Sort expenses by date, most recent first
-        const sortedExpenses = [...expenses].sort((a, b) => new Date(b.date) - new Date(a.date));
+        // Add sorting controls
+        const sortingControls = document.createElement('div');
+        sortingControls.className = 'flex flex-wrap items-center justify-between mb-4 bg-gray-50 p-3 rounded-lg';
         
-        sortedExpenses.forEach(expense => {
+        // Control buttons container
+        const controlsContainer = document.createElement('div');
+        controlsContainer.className = 'flex items-center';
+        
+        const sortingLabel = document.createElement('span');
+        sortingLabel.className = 'text-sm text-gray-600 mr-2';
+        sortingLabel.textContent = 'Sắp xếp theo:';
+        
+        // Add expand/collapse all button
+        const toggleAllBtn = document.createElement('button');
+        toggleAllBtn.type = 'button';
+        toggleAllBtn.className = 'ml-4 flex items-center text-sm bg-white text-gray-700 px-3 py-1 rounded border border-gray-300 hover:bg-gray-50';
+        toggleAllBtn.innerHTML = '<i data-lucide="chevrons-down" class="w-3 h-3 mr-1"></i> Mở rộng tất cả';
+        toggleAllBtn.dataset.expanded = 'false';
+        
+        toggleAllBtn.addEventListener('click', () => {
+            const isExpanded = toggleAllBtn.dataset.expanded === 'true';
+            const expenseItems = this.expenseList.querySelectorAll('[data-expense-id]');
+            
+            expenseItems.forEach(item => {
+                const header = item.querySelector('div:first-child');
+                const body = item.querySelector('div:nth-child(2)');
+                const collapseIcon = header.querySelector('.collapse-icon');
+                
+                if (isExpanded) {
+                    // Collapse all
+                    body.style.maxHeight = null;
+                    collapseIcon.innerHTML = '<i data-lucide="chevron-down" class="w-4 h-4"></i>';
+                    toggleAllBtn.innerHTML = '<i data-lucide="chevrons-down" class="w-3 h-3 mr-1"></i> Mở rộng tất cả';
+                } else {
+                    // Expand all
+                    body.style.maxHeight = body.scrollHeight + "px";
+                    collapseIcon.innerHTML = '<i data-lucide="chevron-up" class="w-4 h-4"></i>';
+                    toggleAllBtn.innerHTML = '<i data-lucide="chevrons-up" class="w-3 h-3 mr-1"></i> Thu gọn tất cả';
+                }
+            });
+            
+            toggleAllBtn.dataset.expanded = isExpanded ? 'false' : 'true';
+            
+            // Initialize icons in the new elements
+            lucide.createIcons({
+                scope: toggleAllBtn
+            });
+        });
+        
+        controlsContainer.appendChild(sortingLabel);
+        controlsContainer.appendChild(toggleAllBtn);
+        
+        const sortOptions = [
+            { value: 'date', label: 'Ngày' },
+            { value: 'amount', label: 'Số tiền' },
+            { value: 'name', label: 'Tên chi tiêu' }
+        ];
+        
+        const sortButtonsContainer = document.createElement('div');
+        sortButtonsContainer.className = 'flex flex-wrap gap-2';
+        
+        sortOptions.forEach(option => {
+            const sortButton = document.createElement('button');
+            sortButton.type = 'button';
+            
+            const isActive = this.sortField === option.value;
+            
+            if (isActive) {
+                sortButton.className = 'flex items-center text-sm bg-green-600 text-white px-3 py-1 rounded';
+                const iconName = this.sortDirection ? 'arrow-down' : 'arrow-up';
+                sortButton.innerHTML = `${option.label} <i data-lucide="${iconName}" class="w-3 h-3 ml-1"></i>`;
+            } else {
+                sortButton.className = 'flex items-center text-sm bg-white text-gray-700 px-3 py-1 rounded border border-gray-300 hover:bg-gray-50';
+                sortButton.textContent = option.label;
+            }
+            
+            sortButton.addEventListener('click', () => {
+                if (this.sortField === option.value) {
+                    // Toggle direction if sorting by same field
+                    this.sortDirection = !this.sortDirection;
+                } else {
+                    // New field, use default direction (descending)
+                    this.sortField = option.value;
+                    this.sortDirection = true;
+                }
+                
+                // Reset to first page when changing sort
+                this.currentPage = 1;
+                this.renderExpenseList();
+            });
+            
+            sortButtonsContainer.appendChild(sortButton);
+        });
+        
+        sortingControls.appendChild(controlsContainer);
+        sortingControls.appendChild(sortButtonsContainer);
+        this.expenseList.appendChild(sortingControls);
+        
+        // Get paginated expenses
+        const paginatedData = this.app.expenseManager.getPaginatedExpenses(
+            this.currentPage, 
+            5, // items per page
+            this.sortField, 
+            this.sortDirection
+        );
+        
+        const { items: currentPageItems, pagination } = paginatedData;
+        const { currentPage, totalPages, startIndex, endIndex, totalItems } = pagination;
+        
+        // Render current page items
+        currentPageItems.forEach(expense => {
             const card = document.createElement('div');
-            card.className = 'bg-white rounded-lg shadow-md p-4';
+            card.className = 'bg-white rounded-lg shadow-md mb-3 border border-gray-100 hover:border-green-200 transition-all duration-200 overflow-hidden';
             card.dataset.expenseId = expense.id;
             
+            // Create collapsible header
             const header = document.createElement('div');
-            header.className = 'flex justify-between items-start mb-2';
+            header.className = 'p-3 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors';
+            header.onclick = function() {
+                const body = this.nextElementSibling;
+                if (body.style.maxHeight) {
+                    body.style.maxHeight = null;
+                    this.querySelector('.collapse-icon').innerHTML = '<i data-lucide="chevron-down" class="w-4 h-4"></i>';
+                } else {
+                    body.style.maxHeight = body.scrollHeight + "px";
+                    this.querySelector('.collapse-icon').innerHTML = '<i data-lucide="chevron-up" class="w-4 h-4"></i>';
+                }
+            };
+
+            // Left side of header with name and amount
+            const headerLeft = document.createElement('div');
+            headerLeft.className = 'flex items-center space-x-3';
             
-            const titleDate = document.createElement('div');
-            
-            const title = document.createElement('h3');
-            title.className = 'text-lg font-medium text-gray-800';
+            const amount = document.createElement('span');
+            amount.className = 'text-lg font-bold text-green-600';
+            amount.textContent = formatCurrency(expense.amount);
+
+            const title = document.createElement('span');
+            title.className = 'font-medium text-gray-800';
             title.textContent = expense.name;
             
-            const date = document.createElement('p');
-            date.className = 'text-sm text-gray-500';
+            // Add payer badge
+            const payerBadge = document.createElement('span');
+            if (expense.payer === this.app.expenseManager.GROUP_FUND_PAYER_ID) {
+                payerBadge.className = 'ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800';
+                payerBadge.innerHTML = '<i data-lucide="piggy-bank" class="w-3 h-3 mr-1"></i>Quỹ nhóm';
+            } else {
+                payerBadge.className = 'ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800';
+                payerBadge.innerHTML = `<i data-lucide="user" class="w-3 h-3 mr-1"></i>${expense.payer}`;
+            }
+            
+            // Add participants count badge
+            const participantsBadge = document.createElement('span');
+            participantsBadge.className = 'ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800';
+            participantsBadge.innerHTML = `<i data-lucide="users" class="w-3 h-3 mr-1"></i>${expense.participants.length}`;
+            
+            headerLeft.appendChild(amount);
+            headerLeft.appendChild(title);
+            headerLeft.appendChild(payerBadge);
+            headerLeft.appendChild(participantsBadge);
+            
+            // Right side of header with date and collapse icon
+            const headerRight = document.createElement('div');
+            headerRight.className = 'flex items-center';
+            
+            const date = document.createElement('span');
+            date.className = 'text-sm text-gray-500 mr-2';
             date.textContent = formatDisplayDate(expense.date);
             
-            titleDate.appendChild(title);
-            titleDate.appendChild(date);
+            const collapseIcon = document.createElement('span');
+            collapseIcon.className = 'collapse-icon';
+            collapseIcon.innerHTML = '<i data-lucide="chevron-down" class="w-4 h-4"></i>';
             
-            const actions = document.createElement('div');
-            actions.className = 'flex space-x-2';
+            headerRight.appendChild(date);
+            headerRight.appendChild(collapseIcon);
             
-            const editBtn = document.createElement('button');
-            editBtn.type = 'button';
-            editBtn.className = 'text-blue-600 hover:text-blue-800';
-            editBtn.innerHTML = '<i data-lucide="edit" class="w-4 h-4"></i>';
-            editBtn.addEventListener('click', () => this.handleEditExpense(expense.id));
+            header.appendChild(headerLeft);
+            header.appendChild(headerRight);
             
-            const deleteBtn = document.createElement('button');
-            deleteBtn.type = 'button';
-            deleteBtn.className = 'text-red-600 hover:text-red-800';
-            deleteBtn.innerHTML = '<i data-lucide="trash" class="w-4 h-4"></i>';
-            deleteBtn.addEventListener('click', () => this.handleDeleteExpense(expense.id));
-            
-            actions.appendChild(editBtn);
-            actions.appendChild(deleteBtn);
-            
-            header.appendChild(titleDate);
-            header.appendChild(actions);
-            
+            // Create collapsible body
             const body = document.createElement('div');
+            body.className = 'overflow-hidden transition-all duration-300';
+            body.style.maxHeight = "0";
+            body.style.transition = "max-height 0.3s ease-out";
             
-            const amount = document.createElement('p');
-            amount.className = 'text-xl font-bold text-green-600 mb-1';
-            amount.textContent = formatCurrency(expense.amount);
+            const bodyContent = document.createElement('div');
+            bodyContent.className = 'p-3 pt-0 border-t border-gray-100';
+            
+            // Add details
+            const details = document.createElement('div');
+            details.className = 'mb-3';
             
             const payer = document.createElement('p');
             payer.className = 'text-sm text-gray-700';
@@ -338,22 +482,236 @@ export class ExpenseUIController extends UIController {
             participants.className = 'text-sm text-gray-700';
             participants.textContent = `Người tham gia: ${expense.participants.join(', ')}`;
             
-            body.appendChild(amount);
-            body.appendChild(payer);
-            body.appendChild(participants);
+            details.appendChild(payer);
+            details.appendChild(participants);
             
+            // Add actions
+            const actions = document.createElement('div');
+            actions.className = 'flex justify-end space-x-2 pt-2 border-t border-gray-100';
+            
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50 transition-colors flex items-center text-sm';
+            editBtn.innerHTML = '<i data-lucide="edit" class="w-4 h-4 mr-1"></i> Sửa';
+            editBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent toggling collapse
+                this.handleEditExpense(expense.id);
+            });
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 transition-colors flex items-center text-sm';
+            deleteBtn.innerHTML = '<i data-lucide="trash" class="w-4 h-4 mr-1"></i> Xóa';
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent toggling collapse
+                this.handleDeleteExpense(expense.id);
+            });
+            
+            actions.appendChild(editBtn);
+            actions.appendChild(deleteBtn);
+            
+            bodyContent.appendChild(details);
+            bodyContent.appendChild(actions);
+            body.appendChild(bodyContent);
+            
+            // Assemble card
             card.appendChild(header);
             card.appendChild(body);
             
             this.expenseList.appendChild(card);
         });
         
-        // Initialize icons for the newly created buttons
-        lucide.createIcons({
-            attrs: {
-                class: 'w-4 h-4'
+        // Create pagination controls if needed
+        if (totalPages > 1) {
+            const paginationContainer = document.createElement('div');
+            paginationContainer.className = 'flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 mt-4 rounded-lg shadow-sm';
+            
+            // Add page info text
+            const pageInfo = document.createElement('div');
+            pageInfo.className = 'flex flex-1 justify-between sm:hidden';
+            pageInfo.innerHTML = `
+                <p class="text-sm text-gray-700">
+                    Hiển thị <span class="font-medium">${startIndex + 1}</span> - 
+                    <span class="font-medium">${endIndex}</span> trên 
+                    <span class="font-medium">${totalItems}</span> chi tiêu
+                </p>
+            `;
+            
+            // Desktop pagination
+            const desktopPagination = document.createElement('div');
+            desktopPagination.className = 'hidden sm:flex sm:flex-1 sm:items-center sm:justify-between';
+            
+            const paginationText = document.createElement('div');
+            paginationText.innerHTML = `
+                <p class="text-sm text-gray-700 flex items-center">
+                    <i data-lucide="list" class="w-4 h-4 mr-2 text-gray-400"></i>
+                    Hiển thị <span class="font-medium mx-1">${startIndex + 1}</span> - 
+                    <span class="font-medium mx-1">${endIndex}</span> trên 
+                    <span class="font-medium mx-1">${totalItems}</span> chi tiêu
+                </p>
+            `;
+            
+            const paginationNav = document.createElement('div');
+            paginationNav.className = 'flex items-center justify-center';
+            
+            const buttonClass = 'relative inline-flex items-center px-4 py-2 text-sm font-medium focus:z-10 focus:outline-none';
+            const activeButtonClass = buttonClass + ' bg-green-600 text-white hover:bg-green-700';
+            const inactiveButtonClass = buttonClass + ' text-gray-700 bg-white hover:bg-gray-50 border border-gray-300';
+            const disabledButtonClass = buttonClass + ' text-gray-300 bg-white border border-gray-200 cursor-not-allowed';
+            
+            // Previous button
+            const prevButton = document.createElement('button');
+            if (currentPage > 1) {
+                prevButton.className = inactiveButtonClass + ' rounded-l-md';
+                prevButton.innerHTML = '<i data-lucide="chevron-left" class="w-4 h-4"></i>';
+                prevButton.addEventListener('click', () => this.changePage(currentPage - 1));
+            } else {
+                prevButton.className = disabledButtonClass + ' rounded-l-md';
+                prevButton.innerHTML = '<i data-lucide="chevron-left" class="w-4 h-4"></i>';
+                prevButton.disabled = true;
             }
+            
+            // Page buttons
+            const paginationList = document.createElement('div');
+            paginationList.className = 'hidden md:flex';
+            
+            // Calculate visible page range
+            let startPage = Math.max(1, currentPage - 2);
+            let endPage = Math.min(totalPages, startPage + 4);
+            
+            // Adjust if we're near the end
+            if (endPage - startPage < 4) {
+                startPage = Math.max(1, endPage - 4);
+            }
+            
+            // First page button if not in range
+            if (startPage > 1) {
+                const firstPageBtn = document.createElement('button');
+                firstPageBtn.className = inactiveButtonClass;
+                firstPageBtn.textContent = '1';
+                firstPageBtn.addEventListener('click', () => this.changePage(1));
+                paginationList.appendChild(firstPageBtn);
+                
+                if (startPage > 2) {
+                    const ellipsis = document.createElement('span');
+                    ellipsis.className = 'relative inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white';
+                    ellipsis.textContent = '...';
+                    paginationList.appendChild(ellipsis);
+                }
+            }
+            
+            // Page number buttons
+            for (let i = startPage; i <= endPage; i++) {
+                const pageButton = document.createElement('button');
+                if (i === currentPage) {
+                    pageButton.className = activeButtonClass;
+                } else {
+                    pageButton.className = inactiveButtonClass;
+                }
+                pageButton.textContent = i;
+                pageButton.addEventListener('click', () => this.changePage(i));
+                paginationList.appendChild(pageButton);
+            }
+            
+            // Last page button if not in range
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    const ellipsis = document.createElement('span');
+                    ellipsis.className = 'relative inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white';
+                    ellipsis.textContent = '...';
+                    paginationList.appendChild(ellipsis);
+                }
+                
+                const lastPageBtn = document.createElement('button');
+                lastPageBtn.className = inactiveButtonClass;
+                lastPageBtn.textContent = totalPages;
+                lastPageBtn.addEventListener('click', () => this.changePage(totalPages));
+                paginationList.appendChild(lastPageBtn);
+            }
+            
+            // Next button
+            const nextButton = document.createElement('button');
+            if (currentPage < totalPages) {
+                nextButton.className = inactiveButtonClass + ' rounded-r-md';
+                nextButton.innerHTML = '<i data-lucide="chevron-right" class="w-4 h-4"></i>';
+                nextButton.addEventListener('click', () => this.changePage(currentPage + 1));
+            } else {
+                nextButton.className = disabledButtonClass + ' rounded-r-md';
+                nextButton.innerHTML = '<i data-lucide="chevron-right" class="w-4 h-4"></i>';
+                nextButton.disabled = true;
+            }
+            
+            // Mobile pagination
+            const mobilePagination = document.createElement('div');
+            mobilePagination.className = 'flex flex-1 justify-between sm:hidden mt-3';
+            
+            const prevMobileBtn = document.createElement('button');
+            if (currentPage > 1) {
+                prevMobileBtn.className = 'relative inline-flex items-center rounded-md px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50';
+                prevMobileBtn.innerHTML = 'Trước';
+                prevMobileBtn.addEventListener('click', () => this.changePage(currentPage - 1));
+            } else {
+                prevMobileBtn.className = 'relative inline-flex items-center rounded-md px-4 py-2 text-sm font-medium text-gray-300 bg-white border border-gray-200 cursor-not-allowed';
+                prevMobileBtn.innerHTML = 'Trước';
+                prevMobileBtn.disabled = true;
+            }
+            
+            const nextMobileBtn = document.createElement('button');
+            if (currentPage < totalPages) {
+                nextMobileBtn.className = 'relative inline-flex items-center rounded-md px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50';
+                nextMobileBtn.innerHTML = 'Sau';
+                nextMobileBtn.addEventListener('click', () => this.changePage(currentPage + 1));
+            } else {
+                nextMobileBtn.className = 'relative inline-flex items-center rounded-md px-4 py-2 text-sm font-medium text-gray-300 bg-white border border-gray-200 cursor-not-allowed';
+                nextMobileBtn.innerHTML = 'Sau';
+                nextMobileBtn.disabled = true;
+            }
+            
+            mobilePagination.appendChild(prevMobileBtn);
+            mobilePagination.appendChild(nextMobileBtn);
+            
+            // Assemble pagination controls
+            paginationNav.appendChild(prevButton);
+            paginationNav.appendChild(paginationList);
+            paginationNav.appendChild(nextButton);
+            
+            desktopPagination.appendChild(paginationText);
+            desktopPagination.appendChild(paginationNav);
+            
+            paginationContainer.appendChild(pageInfo);
+            paginationContainer.appendChild(desktopPagination);
+            paginationContainer.appendChild(mobilePagination);
+            
+            this.expenseList.appendChild(paginationContainer);
+        }
+        
+        // Initialize all Lucide icons in the expense list
+        lucide.createIcons({
+            scope: this.expenseList
         });
+    }
+    
+    /**
+     * Change current page
+     * @param {number} page Page number to navigate to
+     */
+    changePage(page) {
+        this.currentPage = page;
+        this.renderExpenseList();
+        
+        // Reset expand/collapse all button to collapsed state
+        const toggleAllBtn = this.expenseList.querySelector('[data-expanded]');
+        if (toggleAllBtn) {
+            toggleAllBtn.dataset.expanded = 'false';
+            toggleAllBtn.innerHTML = '<i data-lucide="chevrons-down" class="w-3 h-3 mr-1"></i> Mở rộng tất cả';
+            // Re-initialize icon
+            lucide.createIcons({
+                scope: toggleAllBtn
+            });
+        }
+        
+        // Scroll back to the top of the expense list
+        document.getElementById('expense-list-section').scrollIntoView({ behavior: 'smooth' });
     }
     
     /**
@@ -420,6 +778,9 @@ export class ExpenseUIController extends UIController {
                 
                 showMessage('Chi tiêu mới đã được thêm');
             }
+            
+            // Reset to first page after adding/editing
+            this.currentPage = 1;
             
             // Update UI với cơ chế làm mới hoàn chỉnh
             try {
@@ -581,22 +942,26 @@ export class ExpenseUIController extends UIController {
     }
     
     /**
-     * Reset the expense form
+     * Reset the form to initial state
      */
     resetForm() {
         // Reset expense form
         this.expenseForm.reset();
-        this.editingExpenseId = null; 
+        this.editingExpenseId = null;
         this.editExpenseIdInput.value = '';
-        this.formTitle.textContent = 'Thêm chi tiêu mới'; 
+        
+        this.formTitle.textContent = 'Thêm chi tiêu mới';
         this.saveBtnText.textContent = 'Lưu chi tiêu';
         this.saveExpenseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600'); 
         this.saveExpenseBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+        this.saveExpenseBtn.disabled = false;
+        
         this.cancelEditBtn.classList.add('hidden');
         this.expenseDateInput.value = getTodayDateString();
         this.participantsListDiv.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+        
         this.splitEquallyToggle.checked = true;
-        this.manualSplitSection.classList.add('hidden'); 
+        this.manualSplitSection.classList.add('hidden');
         this.manualSplitInputsDiv.innerHTML = ''; 
         this.manualSplitError.classList.add('hidden');
         this.splitEquallyToggle.dispatchEvent(new Event('change'));

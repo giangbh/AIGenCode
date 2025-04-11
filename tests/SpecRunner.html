@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Jasmine Spec Runner - CafeThu6 Tests</title>
+
+  <!-- Jasmine CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jasmine/4.1.0/jasmine.min.css">
+
+  <!-- Jasmine Core -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jasmine/4.1.0/jasmine.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jasmine/4.1.0/jasmine-html.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jasmine/4.1.0/boot0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jasmine/4.1.0/boot1.min.js"></script>
+
+  <!-- Mocking library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jasmine-ajax/4.0.0/mock-ajax.min.js"></script>
+
+  <!-- Source files -->
+  <script type="module">
+    // Mock localStorage for testing
+    class MockStorage {
+      constructor() {
+        this.store = {};
+      }
+      
+      getItem(key) {
+        return this.store[key] || null;
+      }
+      
+      setItem(key, value) {
+        this.store[key] = String(value);
+      }
+      
+      removeItem(key) {
+        delete this.store[key];
+      }
+      
+      clear() {
+        this.store = {};
+      }
+    }
+    
+    // Replace localStorage with mockStorage before tests
+    window.originalLocalStorage = window.localStorage;
+    window.mockStorage = new MockStorage();
+    
+    // Make the mock storage accessible to tests
+    window.getMockStorage = () => window.mockStorage;
+    
+    // Helper to reset storage between tests
+    window.resetMockStorage = () => {
+      window.mockStorage.clear();
+    };
+  </script>
+
+  <!-- Specs (tests) -->
+  <script type="module" src="models/ExpenseSpec.js"></script>
+  <script type="module" src="models/FundTransactionSpec.js"></script>
+  <script type="module" src="controllers/ExpenseManagerSpec.js"></script>
+  <script type="module" src="utils/helpersSpec.js"></script>
+</head>
+<body>
+</body>
+</html> 

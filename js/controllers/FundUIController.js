@@ -5,6 +5,7 @@
 
 import { UIController } from './UIController.js';
 import { formatCurrency, formatAmountInput, parseFormattedAmount, getTodayDateString, showMessage } from '../utils/helpers.js';
+import { isAdmin } from '../utils/auth.js';
 
 export class FundUIController extends UIController {
     /**
@@ -293,6 +294,21 @@ export class FundUIController extends UIController {
             
             header.appendChild(dateAmount);
             
+            // Add delete button for admin users only
+            if (isAdmin() && transaction.isDeposit()) {
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'text-red-500 hover:text-red-700 text-xs p-1';
+                deleteButton.innerHTML = '<i data-lucide="trash-2" class="w-3 h-3"></i>';
+                deleteButton.title = 'Xóa giao dịch';
+                deleteButton.addEventListener('click', () => {
+                    if (confirm('Bạn có chắc chắn muốn xóa giao dịch này?')) {
+                        this.handleDeleteDeposit(transaction.id);
+                    }
+                });
+                
+                header.appendChild(deleteButton);
+            }
+            
             const description = document.createElement('p');
             description.className = 'text-sm text-gray-700';
             
@@ -456,5 +472,19 @@ export class FundUIController extends UIController {
                 maintainAspectRatio: false
             }
         });
+    }
+    
+    /**
+     * Handle delete deposit transaction
+     * @param {string} transactionId - The transaction ID to delete
+     */
+    async handleDeleteDeposit(transactionId) {
+        try {
+            // Call to delete deposit will be implemented in the future
+            showMessage('Chức năng xóa giao dịch đang được phát triển', 'info');
+        } catch (error) {
+            console.error('Lỗi khi xóa giao dịch:', error);
+            showMessage('Không thể xóa giao dịch: ' + error.message, 'error');
+        }
     }
 } 

@@ -5,6 +5,7 @@
 
 import { UIController } from './UIController.js';
 import { showMessage } from '../utils/helpers.js';
+import { isAdmin } from '../utils/auth.js';
 
 export class MemberUIController extends UIController {
     /**
@@ -87,7 +88,11 @@ export class MemberUIController extends UIController {
             deleteButton.addEventListener('click', () => this.handleDeleteMember(member));
             
             buttonsContainer.appendChild(editButton);
-            buttonsContainer.appendChild(deleteButton);
+            
+            // Only show delete button if user is admin
+            if (isAdmin()) {
+                buttonsContainer.appendChild(deleteButton);
+            }
             
             memberDiv.appendChild(memberInfo);
             memberDiv.appendChild(buttonsContainer);

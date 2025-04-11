@@ -5,6 +5,7 @@
 
 import { UIController } from './UIController.js';
 import { formatCurrency, formatDisplayDate, formatAmountInput, parseFormattedAmount, getTodayDateString, showMessage } from '../utils/helpers.js';
+import { isAdmin } from '../utils/auth.js';
 
 export class ExpenseUIController extends UIController {
     /**
@@ -517,8 +518,12 @@ export class ExpenseUIController extends UIController {
                 this.handleDeleteExpense(expense.id);
             });
             
+            // Only add delete button if user is admin
+            if (isAdmin()) {
+                actions.appendChild(deleteBtn);
+            }
+            
             actions.appendChild(editBtn);
-            actions.appendChild(deleteBtn);
             
             bodyContent.appendChild(details);
             bodyContent.appendChild(actions);

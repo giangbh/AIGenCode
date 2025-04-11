@@ -11,7 +11,7 @@ import { FundUIController } from './controllers/FundUIController.js';
 import { MemberUIController } from './controllers/MemberUIController.js';
 import { initializeStorage, clearAllData, supabase } from './utils/storage.js';
 import { showMessage } from './utils/helpers.js';
-import { initAuth, isLoggedIn, getLoggedInUser } from './utils/auth.js';
+import { initAuth, isLoggedIn, getLoggedInUser, isAdmin } from './utils/auth.js';
 
 class App {
     /**
@@ -72,6 +72,9 @@ class App {
             
             // Initialize authentication system
             initAuth();
+            
+            // Setup the clear all data button
+            this.setupClearAllDataButton();
             
             // Render all components
             await this.renderAll();
@@ -315,6 +318,43 @@ class App {
      */
     isUserLoggedIn() {
         return isLoggedIn();
+    }
+
+    /**
+     * Setup the Clear All Data button
+     */
+    setupClearAllDataButton() {
+        const clearAllDataBtn = document.getElementById('clear-all-data-btn');
+        if (clearAllDataBtn) {
+            // Initially hide the button, will show based on role in updateAuthUI
+            clearAllDataBtn.classList.add('hidden');
+            
+            clearAllDataBtn.addEventListener('click', async () => {
+                if (confirm('Bạn có chắc chắn muốn xóa tất cả dữ liệu? Hành động này không thể hoàn tác!')) {
+                    try {
+                        showMessage('Đang xóa dữ liệu...', 'info');
+                        
+                        // Clear all data in Supabase
+                        await clearAllData();
+                        
+                        // Reload data for all managers
+                        await Promise.all([
+                            this.memberManager.loadData(),
+                            this.fundManager.loadData(),
+                            this.expenseManager.loadData()
+                        ]);
+                        
+                        // Update UI
+                        this.renderAll();
+                        
+                        showMessage('Đã xóa tất cả dữ liệu thành công');
+                    } catch (error) {
+                        console.error('Lỗi khi xóa dữ liệu:', error);
+                        showMessage('Lỗi khi xóa dữ liệu: ' + error.message, 'error');
+                    }
+                }
+            });
+        }
     }
 }
 

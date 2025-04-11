@@ -26,6 +26,22 @@ export function getLoggedInUser() {
 }
 
 /**
+ * Get the role of currently logged in user
+ * @returns {string|null} Role of logged in user or null if not logged in
+ */
+export function getUserRole() {
+    return localStorage.getItem('cafethu6_user_role');
+}
+
+/**
+ * Check if current user is an admin
+ * @returns {boolean} True if user is logged in and has admin role
+ */
+export function isAdmin() {
+    return getUserRole() === 'admin';
+}
+
+/**
  * Attempt to login with the given credentials
  * @param {string} username Username (must match a member name)
  * @param {string} password Password (should match fixed password)
@@ -43,10 +59,10 @@ export async function login(username, password) {
             return { success: false, message: 'Mật khẩu không đúng' };
         }
         
-        // Check if username exists in members
+        // Check if username exists in members and get role
         const { data: members, error } = await supabase
             .from('members')
-            .select('name')
+            .select('name, role')
             .eq('name', username);
             
         if (error) {
@@ -58,8 +74,9 @@ export async function login(username, password) {
             return { success: false, message: 'Tên đăng nhập không tồn tại' };
         }
         
-        // Set logged in user
+        // Set logged in user and role
         localStorage.setItem('cafethu6_current_user', username);
+        localStorage.setItem('cafethu6_user_role', members[0].role || 'member');
         
         return { success: true, message: `Đăng nhập thành công với tên ${username}` };
     } catch (error) {
@@ -74,6 +91,7 @@ export async function login(username, password) {
  */
 export function logout() {
     localStorage.removeItem('cafethu6_current_user');
+    localStorage.removeItem('cafethu6_user_role');
     return true;
 }
 
@@ -161,6 +179,7 @@ export function updateAuthUI() {
     const currentUser = getLoggedInUser();
     const currentUserDisplay = document.getElementById('current-user-display');
     const loginModal = document.getElementById('login-modal-backdrop');
+    const clearAllDataBtn = document.getElementById('clear-all-data-btn');
     
     if (currentUser) {
         // User is logged in, update display
@@ -178,6 +197,15 @@ export function updateAuthUI() {
         document.querySelectorAll('.current-user-indicator').forEach(el => {
             el.classList.remove('hidden');
         });
+        
+        // Only show Clear All Data button if user is admin
+        if (clearAllDataBtn) {
+            if (isAdmin()) {
+                clearAllDataBtn.classList.remove('hidden');
+            } else {
+                clearAllDataBtn.classList.add('hidden');
+            }
+        }
         
         // Hide login modal
         if (loginModal) {
@@ -205,6 +233,11 @@ export function updateAuthUI() {
         document.querySelectorAll('.current-user-indicator').forEach(el => {
             el.classList.add('hidden');
         });
+        
+        // Hide Clear All Data button
+        if (clearAllDataBtn) {
+            clearAllDataBtn.classList.add('hidden');
+        }
         
         // Show login modal
         if (loginModal) {

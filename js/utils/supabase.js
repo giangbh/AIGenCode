@@ -35,14 +35,16 @@ export async function getMembers() {
  * Thêm thành viên mới vào Supabase
  * @param {string} name Tên thành viên
  * @param {string} bankAccount Số tài khoản ngân hàng
+ * @param {string} role Vai trò của thành viên (default: 'member')
  * @returns {Promise<Object>} Thành viên được thêm
  */
-export async function addMember(name, bankAccount) {
+export async function addMember(name, bankAccount, role = 'member') {
     const { data, error } = await supabase
         .from('members')
         .insert([{ 
             name: name, 
-            bank_account: bankAccount 
+            bank_account: bankAccount,
+            role: role
         }])
         .select();
     

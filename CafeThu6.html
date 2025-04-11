@@ -40,9 +40,13 @@
                 </button>
                 
                 <!-- Nút làm mới dữ liệu -->
-                <button id="refresh-data-btn" class="ml-auto px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md flex items-center">
+                <button id="refresh-data-btn" class="ml-auto text-sm text-gray-600 hover:text-blue-600 px-3 py-2 rounded-md flex items-center border border-transparent hover:border-blue-200 hover:bg-blue-50 transition-all duration-200 relative group">
                     <i data-lucide="refresh-cw" class="w-4 h-4 mr-1"></i>
-                    <span>Làm mới dữ liệu</span>
+                    <span class="hidden sm:inline">Làm mới</span>
+                    <!-- Tooltip -->
+                    <div class="absolute hidden group-hover:block bottom-full right-0 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded whitespace-nowrap">
+                        Cập nhật dữ liệu từ Supabase
+                    </div>
                 </button>
             </div>
         </nav>

@@ -205,10 +205,21 @@ class App {
         if (refreshBtn) {
             refreshBtn.addEventListener('click', async () => {
                 try {
-                    // Hiển thị trạng thái đang làm mới
+                    // Prevent multiple clicks
+                    if (refreshBtn.disabled) return;
+                    
+                    // Save original text and disable button
                     const originalText = refreshBtn.innerHTML;
                     refreshBtn.disabled = true;
-                    refreshBtn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 mr-1 animate-spin"></i><span>Đang làm mới...</span>';
+                    
+                    // Add loading animation class
+                    refreshBtn.classList.add('animate-pulse', 'text-blue-600', 'border-blue-200', 'bg-blue-50');
+                    
+                    // Change button text and icon
+                    const isSmallScreen = window.innerWidth < 640; // Check if small screen (matches sm: breakpoint in Tailwind)
+                    refreshBtn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 mr-1 animate-spin"></i>${isSmallScreen ? '' : '<span>Đang tải...</span>'}`;
+                    
+                    // Initialize the loader icon
                     lucide.createIcons({
                         scope: refreshBtn
                     });
@@ -226,23 +237,62 @@ class App {
                     // Thông báo thành công
                     showMessage('Dữ liệu đã được cập nhật từ Supabase');
                     
-                    // Khôi phục trạng thái nút
-                    refreshBtn.disabled = false;
-                    refreshBtn.innerHTML = originalText;
+                    // Add success animation
+                    refreshBtn.classList.remove('animate-pulse', 'text-blue-600');
+                    refreshBtn.classList.add('text-green-600', 'border-green-200', 'bg-green-50');
+                    refreshBtn.innerHTML = `<i data-lucide="check" class="w-4 h-4 mr-1"></i>${isSmallScreen ? '' : '<span>Đã cập nhật</span>'}`;
+                    
+                    // Initialize the check icon
                     lucide.createIcons({
                         scope: refreshBtn
                     });
+                    
+                    // Reset button after short delay
+                    setTimeout(() => {
+                        refreshBtn.disabled = false;
+                        refreshBtn.classList.remove('text-green-600', 'border-green-200', 'bg-green-50');
+                        refreshBtn.innerHTML = originalText;
+                        lucide.createIcons({
+                            scope: refreshBtn
+                        });
+                    }, 2000);
+                    
                 } catch (error) {
                     console.error('Lỗi khi làm mới dữ liệu:', error);
                     showMessage('Lỗi khi làm mới dữ liệu', 'error');
                     
-                    // Khôi phục trạng thái nút
-                    refreshBtn.disabled = false;
-                    refreshBtn.innerHTML = '<i data-lucide="refresh-cw" class="w-4 h-4 mr-1"></i><span>Làm mới dữ liệu</span>';
+                    // Show error state
+                    refreshBtn.classList.remove('animate-pulse', 'text-blue-600', 'border-blue-200', 'bg-blue-50');
+                    refreshBtn.classList.add('text-red-600', 'border-red-200', 'bg-red-50');
+                    
+                    const isSmallScreen = window.innerWidth < 640;
+                    refreshBtn.innerHTML = `<i data-lucide="alert-circle" class="w-4 h-4 mr-1"></i>${isSmallScreen ? '' : '<span>Lỗi</span>'}`;
+                    
                     lucide.createIcons({
                         scope: refreshBtn
                     });
+                    
+                    // Reset button after delay
+                    setTimeout(() => {
+                        refreshBtn.disabled = false;
+                        refreshBtn.classList.remove('text-red-600', 'border-red-200', 'bg-red-50');
+                        refreshBtn.innerHTML = originalText;
+                        lucide.createIcons({
+                            scope: refreshBtn
+                        });
+                    }, 2000);
                 }
+            });
+            
+            // Add window resize listener to update button text for responsive design
+            window.addEventListener('resize', () => {
+                if (refreshBtn.disabled) return; // Don't modify button if in loading/success/error state
+                
+                const isSmallScreen = window.innerWidth < 640;
+                refreshBtn.innerHTML = `<i data-lucide="refresh-cw" class="w-4 h-4 mr-1"></i>${isSmallScreen ? '' : '<span class="hidden sm:inline">Làm mới</span>'}`;
+                lucide.createIcons({
+                    scope: refreshBtn
+                });
             });
         }
     }

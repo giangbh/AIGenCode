@@ -1,0 +1,71 @@
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: #f0fdf4; /* Light pastel green background */
+}
+/* Custom iOS-like toggle switch styles */
+.toggle-checkbox:checked { background-color: #22c55e; right: 0; border-color: #22c55e; }
+.toggle-checkbox:checked + .toggle-label { background-color: #22c55e; }
+.toggle-checkbox:checked + .toggle-label .toggle-ball { transform: translateX(100%); }
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
+/* Ensure icons align vertically */
+svg[data-lucide] { vertical-align: middle; width: 1em; height: 1em; }
+/* Manual split animation */
+.manual-split-enter { opacity: 0; transform: translateY(-10px); transition: opacity 0.3s ease, transform 0.3s ease; }
+.manual-split-enter-active { opacity: 1; transform: translateY(0); }
+.manual-split-leave-active { opacity: 0; transform: translateY(-10px); transition: opacity 0.3s ease, transform 0.3s ease; }
+/* Message box styles */
+#message-box { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 1rem 1.5rem; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); z-index: 1000; display: none; opacity: 0; transition: opacity 0.3s ease-in-out; }
+#message-box.show { display: block; opacity: 1; }
+#message-box.success { background-color: #dcfce7; color: #166534; border: 1px solid #86efac; }
+#message-box.error { background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+/* QR Modal Styles */
+#qr-modal-backdrop { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1050; opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease; }
+#qr-modal-backdrop.show { opacity: 1; visibility: visible; }
+#qr-modal-content { background-color: white; padding: 1.5rem; border-radius: 0.5rem; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3); max-width: 90%; width: 300px; text-align: center; transform: scale(0.95); transition: transform 0.3s ease; }
+#qr-modal-backdrop.show #qr-modal-content { transform: scale(1); }
+#qr-code-image { max-width: 100%; height: auto; margin-bottom: 1rem; display: block; margin-left: auto; margin-right: auto; }
+.qr-link[disabled] { opacity: 0.5; cursor: not-allowed; pointer-events: none; text-decoration: line-through; }
+/* Toggle button color states */
+#toggle-all-participants-btn.select-all { color: #2563eb; }
+#toggle-all-participants-btn.select-all:hover { color: #1e40af; }
+#toggle-all-participants-btn.clear-all { color: #dc2626; }
+#toggle-all-participants-btn.clear-all:hover { color: #991b1b; }
+/* Date input style */
+input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; }
+input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+/* Group Fund Section Styles */
+#group-fund-section { background-color: #e0f2fe; border: 1px solid #bae6fd; }
+.fund-transaction-item { border-bottom: 1px dashed #cbd5e1; padding-bottom: 0.5rem; margin-bottom: 0.5rem; }
+.fund-transaction-item:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+/* Tab Styles */
+.tab-button {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500; 
+    color: #4b5563;
+    border-bottom: 2px solid transparent;
+    transition: all 150ms ease-in-out;
+}
+.tab-button:hover {
+    color: #1f2937;
+    border-bottom-color: #d1d5db;
+}
+.tab-button:focus {
+    outline: none;
+}
+.tab-button.active {
+    color: #16a34a;
+    border-bottom-color: #22c55e;
+    font-weight: 600;
+}
+.tab-content {
+    display: none; /* Hidden by default */
+    margin-top: 1.5rem;
+}
+.tab-content.active {
+    display: block; /* Shown when active */
+} 

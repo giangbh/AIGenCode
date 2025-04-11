@@ -137,7 +137,10 @@ export class ExpenseUIController extends UIController {
             checkbox.name = 'participants';
             checkbox.value = member;
             checkbox.checked = true; // Default to checked
-            checkbox.className = 'w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2';
+            checkbox.className = 'participant-checkbox w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2';
+            
+            // Add event listener to handle the change event
+            checkbox.addEventListener('change', () => this.handleParticipantChange());
             
             const label = document.createElement('label');
             label.htmlFor = `participant-${member}`;

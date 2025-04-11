@@ -27,8 +27,9 @@ export class FundUIController extends UIController {
         this.groupFundTransactionsLogDiv = document.getElementById('group-fund-transactions-log');
         this.noFundTransactionsMessage = document.getElementById('no-fund-transactions-message');
         
-        // Chart
+        // Charts
         this.fundPieChart = null;
+        this.incomeExpenseChart = null;
         
         // Pagination for fund transactions
         this.transactionsPerPage = 6; // Show 6 transactions per page
@@ -71,7 +72,7 @@ export class FundUIController extends UIController {
     }
     
     /**
-     * Render fund balance and status
+     * Render fund status
      */
     renderFundStatus() {
         const balance = this.app.fundManager.getBalance();
@@ -94,8 +95,9 @@ export class FundUIController extends UIController {
         // Render member balances
         this.renderMemberBalances();
         
-        // Update the pie chart
+        // Update the charts
         this.updateFundPieChart();
+        this.updateIncomeExpenseChart();
     }
     
     /**
@@ -392,84 +394,188 @@ export class FundUIController extends UIController {
      * Update the fund pie chart
      */
     updateFundPieChart() {
-        // Get the chart context
-        const canvas = document.getElementById('fund-pie-chart');
-        if (!canvas) return;
+        const fundPieChartCanvas = document.getElementById('fund-pie-chart');
+        if (!fundPieChartCanvas) return;
         
-        const ctx = canvas.getContext('2d');
-        
-        // Prepare the data for the pie chart using memberBalances
         const memberBalances = this.app.fundManager.getMemberBalances();
         const members = this.app.memberManager.getAllMembers();
         
-        const chartLabels = [];
-        const chartData = [];
+        // Prepare data for the chart
+        const labels = [];
+        const data = [];
+        const backgroundColors = [
+            'rgba(54, 162, 235, 0.8)',
+            'rgba(255, 99, 132, 0.8)',
+            'rgba(255, 206, 86, 0.8)',
+            'rgba(75, 192, 192, 0.8)',
+            'rgba(153, 102, 255, 0.8)',
+            'rgba(255, 159, 64, 0.8)',
+            'rgba(199, 199, 199, 0.8)'
+        ];
         
-        // Add only members with positive balances
-        members.forEach(member => {
+        // Add members with positive balances
+        members.forEach((member, index) => {
             const balance = memberBalances[member] || 0;
             if (balance > 0) {
-                chartLabels.push(member);
-                chartData.push(balance);
+                labels.push(member);
+                data.push(balance);
             }
         });
         
-        // Generate colors for each segment (one per member)
-        const colors = [
-            '#4ade80', // green-400
-            '#60a5fa', // blue-400
-            '#f87171', // red-400
-            '#facc15', // yellow-400
-            '#a78bfa', // purple-400
-            '#fb923c'  // orange-400
-        ];
-        
-        // If there's no data, show a placeholder
-        if (chartLabels.length === 0) {
-            chartLabels.push('Chưa có dữ liệu');
-            chartData.push(100);
+        // If no members have positive balances, show a message
+        if (labels.length === 0) {
+            labels.push('Không có dữ liệu');
+            data.push(1);
         }
         
-        // If there's an existing chart, destroy it before creating a new one
+        // If chart exists, destroy it
         if (this.fundPieChart) {
             this.fundPieChart.destroy();
         }
         
-        // Create a new pie chart
-        this.fundPieChart = new Chart(ctx, {
+        // Create new chart
+        this.fundPieChart = new Chart(fundPieChartCanvas, {
             type: 'pie',
             data: {
-                labels: chartLabels,
+                labels: labels,
                 datasets: [{
-                    data: chartData,
-                    backgroundColor: colors.slice(0, chartLabels.length),
+                    data: data,
+                    backgroundColor: backgroundColors.slice(0, labels.length),
                     borderWidth: 1
                 }]
             },
             options: {
+                responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
                     legend: {
                         position: 'right',
                         labels: {
+                            boxWidth: 15,
                             font: {
-                                family: 'Roboto, sans-serif'
+                                size: 12
                             }
                         }
                     },
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                const label = context.label || '';
-                                const value = context.raw || 0;
-                                const total = context.chart.data.datasets[0].data.reduce((sum, val) => sum + val, 0);
-                                const percentage = Math.round((value / total) * 100);
-                                return `${label}: ${formatCurrency(value)} (${percentage}%)`;
+                                return ` ${context.label}: ${formatCurrency(context.raw)}`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    /**
+     * Update the income/expense bar chart
+     */
+    updateIncomeExpenseChart() {
+        const incomeExpenseChartCanvas = document.getElementById('income-expense-chart');
+        if (!incomeExpenseChartCanvas) return;
+        
+        const transactions = this.app.fundManager.getAllTransactions();
+        
+        // Get last 6 months data
+        const today = new Date();
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(today.getMonth() - 5); // Get the past 6 months including current
+        
+        // Initialize data structure for the past 6 months
+        const months = [];
+        const incomeData = [];
+        const expenseData = [];
+        
+        for (let i = 0; i < 6; i++) {
+            const month = new Date(sixMonthsAgo);
+            month.setMonth(sixMonthsAgo.getMonth() + i);
+            
+            const monthName = month.toLocaleString('vi-VN', { month: 'short' });
+            const yearShort = month.getFullYear().toString().substr(-2);
+            const label = `${monthName}/${yearShort}`;
+            
+            months.push(label);
+            incomeData.push(0);
+            expenseData.push(0);
+        }
+        
+        // Aggregate transaction data by month
+        transactions.forEach(transaction => {
+            const transactionDate = new Date(transaction.date);
+            // Only consider transactions in the last 6 months
+            if (transactionDate >= sixMonthsAgo) {
+                const monthIndex = transactionDate.getMonth() - sixMonthsAgo.getMonth() + 
+                    (transactionDate.getFullYear() - sixMonthsAgo.getFullYear()) * 12;
+                
+                if (monthIndex >= 0 && monthIndex < 6) {
+                    if (transaction.isDeposit()) {
+                        incomeData[monthIndex] += transaction.amount;
+                    } else {
+                        expenseData[monthIndex] += transaction.amount;
+                    }
+                }
+            }
+        });
+        
+        // If chart exists, destroy it
+        if (this.incomeExpenseChart) {
+            this.incomeExpenseChart.destroy();
+        }
+        
+        // Create new chart
+        this.incomeExpenseChart = new Chart(incomeExpenseChartCanvas, {
+            type: 'bar',
+            data: {
+                labels: months,
+                datasets: [
+                    {
+                        label: 'Thu',
+                        data: incomeData,
+                        backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Chi',
+                        data: expenseData,
+                        backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                if (value >= 1000000) {
+                                    return value / 1000000 + 'M';
+                                } else if (value >= 1000) {
+                                    return value / 1000 + 'K';
+                                }
+                                return value;
                             }
                         }
                     }
                 },
-                responsive: true,
-                maintainAspectRatio: false
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.dataset.label}: ${formatCurrency(context.raw)}`;
+                            }
+                        }
+                    }
+                }
             }
         });
     }

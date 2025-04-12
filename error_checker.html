@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiểm tra lỗi CafeThu6</title>
+    <script>
+        // Hàm kiểm tra lỗi
+        window.onerror = function(message, source, lineno, colno, error) {
+            const errorDetails = document.createElement('div');
+            errorDetails.innerHTML = `
+                <div style="color: red; margin: 10px 0; padding: 10px; border: 1px solid red;">
+                    <strong>Lỗi:</strong> ${message}<br>
+                    <strong>File:</strong> ${source}<br>
+                    <strong>Dòng:</strong> ${lineno}:${colno}<br>
+                    <pre>${error ? error.stack : 'Không có stack trace'}</pre>
+                </div>
+            `;
+            document.getElementById('error-log').appendChild(errorDetails);
+            console.error(message, source, lineno, colno, error);
+            return true;
+        };
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="p-8">
+    <h1 class="text-3xl font-bold mb-4">Kiểm tra lỗi CafeThu6</h1>
+    
+    <div>
+        <h2 class="text-xl font-semibold mb-2">Các module được tải:</h2>
+        <ul id="loaded-modules" class="mb-6 list-disc pl-6"></ul>
+    </div>
+    
+    <div>
+        <h2 class="text-xl font-semibold mb-2">Lỗi phát hiện:</h2>
+        <div id="error-log"></div>
+    </div>
+    
+    <script type="module">
+        import * as supabase from './js/utils/supabase.js';
+        import * as storage from './js/utils/storage.js';
+        import { GroupFundManager } from './js/controllers/GroupFundManager.js';
+        import { FundUIController } from './js/controllers/FundUIController.js';
+        import { MemberManager } from './js/controllers/MemberManager.js';
+        import { ExpenseManager } from './js/controllers/ExpenseManager.js';
+        
+        const loadedModulesList = document.getElementById('loaded-modules');
+        
+        try {
+            // Kiểm tra các module đã import
+            loadedModulesList.innerHTML += `<li>supabase: ${typeof supabase !== 'undefined' ? '✅' : '❌'}</li>`;
+            loadedModulesList.innerHTML += `<li>storage: ${typeof storage !== 'undefined' ? '✅' : '❌'}</li>`;
+            loadedModulesList.innerHTML += `<li>GroupFundManager: ${typeof GroupFundManager !== 'undefined' ? '✅' : '❌'}</li>`;
+            loadedModulesList.innerHTML += `<li>FundUIController: ${typeof FundUIController !== 'undefined' ? '✅' : '❌'}</li>`;
+            loadedModulesList.innerHTML += `<li>MemberManager: ${typeof MemberManager !== 'undefined' ? '✅' : '❌'}</li>`;
+            loadedModulesList.innerHTML += `<li>ExpenseManager: ${typeof ExpenseManager !== 'undefined' ? '✅' : '❌'}</li>`;
+            
+            // Thử khởi tạo các đối tượng
+            const dummy = { memberManager: { getAllMembers: () => [] } };
+            const fundManager = new GroupFundManager();
+            const memberManager = new MemberManager([]);
+            
+            loadedModulesList.innerHTML += `<li>Khởi tạo GroupFundManager: ✅</li>`;
+            loadedModulesList.innerHTML += `<li>Khởi tạo MemberManager: ✅</li>`;
+            
+        } catch (error) {
+            const errorDetails = document.createElement('div');
+            errorDetails.innerHTML = `
+                <div style="color: red; margin: 10px 0; padding: 10px; border: 1px solid red;">
+                    <strong>Lỗi khi khởi tạo:</strong> ${error.message}<br>
+                    <pre>${error.stack}</pre>
+                </div>
+            `;
+            document.getElementById('error-log').appendChild(errorDetails);
+            console.error(error);
+        }
+    </script>
+</body>
+</html> 

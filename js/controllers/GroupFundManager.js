@@ -4,7 +4,7 @@
  */
 
 import { FundTransaction } from '../models/FundTransaction.js';
-import { loadFundTransactions, invalidateCache, supabase, getCurrentBalance, updateFundBalance, recalculateBalance, getMemberBalance, updateMemberBalance } from '../utils/storage.js';
+import { loadFundTransactions, invalidateCache, supabase } from '../utils/storage.js';
 
 export class GroupFundManager {
     /**
@@ -34,7 +34,7 @@ export class GroupFundManager {
     async loadData() {
         try {
             // Lấy số dư quỹ hiện tại từ bảng fund_balance
-            const fundBalance = await getCurrentBalance();
+            const fundBalance = await supabase.getCurrentBalance();
             this.balance = fundBalance;
             
             // Vẫn tải transactions để hiển thị lịch sử và tính số dư thành viên
@@ -68,7 +68,7 @@ export class GroupFundManager {
             
             // Tải số dư của từng thành viên từ bảng member_balances
             await Promise.all(members.map(async (member) => {
-                this.memberBalances[member] = await getMemberBalance(member);
+                this.memberBalances[member] = await supabase.getMemberBalance(member);
             }));
         } catch (error) {
             console.error('Lỗi khi tải số dư thành viên:', error);
@@ -153,13 +153,13 @@ export class GroupFundManager {
             this.balance += amount;
             
             // Cập nhật số dư quỹ trong database
-            await updateFundBalance(this.balance, transaction.id);
+            await supabase.updateFundBalance(this.balance, transaction.id);
             
             // Update member balance locally
             this.memberBalances[member] = (this.memberBalances[member] || 0) + amount;
             
             // Cập nhật số dư thành viên trong database
-            await updateMemberBalance(member, this.memberBalances[member], transaction.id);
+            await supabase.updateMemberBalance(member, this.memberBalances[member], transaction.id);
             
             // Add to local transactions
             this.transactions.push(transaction);
@@ -219,7 +219,7 @@ export class GroupFundManager {
             }
             
             // Cập nhật số dư quỹ trong database
-            await updateFundBalance(this.balance, transaction.id);
+            await supabase.updateFundBalance(this.balance, transaction.id);
             
             // Apply member balance changes locally
             Object.entries(memberBalanceChanges).forEach(([member, change]) => {
@@ -228,7 +228,7 @@ export class GroupFundManager {
             
             // Cập nhật số dư thành viên trong database
             await Promise.all(Object.entries(memberBalanceChanges).map(async ([member, change]) => {
-                await updateMemberBalance(member, this.memberBalances[member], transaction.id);
+                await supabase.updateMemberBalance(member, this.memberBalances[member], transaction.id);
             }));
             
             // Add to transactions
@@ -267,7 +267,7 @@ export class GroupFundManager {
             this.balance += transaction.amount;
             
             // Cập nhật số dư quỹ trong database
-            await updateFundBalance(this.balance, null);
+            await supabase.updateFundBalance(this.balance, null);
             
             // Apply member balance changes locally
             Object.entries(memberBalanceChanges).forEach(([member, change]) => {
@@ -276,7 +276,7 @@ export class GroupFundManager {
             
             // Cập nhật số dư thành viên trong database
             await Promise.all(Object.entries(memberBalanceChanges).map(async ([member, change]) => {
-                await updateMemberBalance(member, this.memberBalances[member], null);
+                await supabase.updateMemberBalance(member, this.memberBalances[member], null);
             }));
             
             // Remove the transaction
@@ -352,7 +352,7 @@ export class GroupFundManager {
     async synchronizeBalance() {
         try {
             // Lấy số dư từ database
-            const databaseBalance = await getCurrentBalance();
+            const databaseBalance = await supabase.getCurrentBalance();
             
             // So sánh với số dư cục bộ
             if (databaseBalance !== this.balance) {
@@ -378,7 +378,7 @@ export class GroupFundManager {
     async forceRecalculateBalance() {
         try {
             // Sử dụng hàm tính toán lại từ database
-            const recalculatedBalance = await recalculateBalance();
+            const recalculatedBalance = await supabase.recalculateBalance();
             
             // Cập nhật số dư cục bộ
             this.balance = recalculatedBalance;

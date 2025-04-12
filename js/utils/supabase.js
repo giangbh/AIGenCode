@@ -450,6 +450,21 @@ export async function updateFundBalance(newBalance, transactionId) {
         
         return data[0];
     } else {
+        // Lấy ID của record hiện tại
+        const { data: balanceRecord, error: fetchError } = await supabase
+            .from('fund_balance')
+            .select('id, version')
+            .limit(1)
+            .single();
+            
+        if (fetchError) {
+            console.error('Lỗi khi lấy ID record fund_balance:', fetchError);
+            throw new Error(`Không thể lấy ID record fund_balance: ${fetchError.message}`);
+        }
+        
+        // Tính toán phiên bản mới
+        const newVersion = (balanceRecord.version || 0) + 1;
+        
         // Đã có dữ liệu, cập nhật
         const { data, error } = await supabase
             .from('fund_balance')
@@ -457,9 +472,9 @@ export async function updateFundBalance(newBalance, transactionId) {
                 current_balance: newBalance,
                 last_transaction_id: transactionId,
                 last_updated: new Date().toISOString(),
-                version: supabase.rpc('increment_version', { row_id: 1 })
+                version: newVersion
             })
-            .eq('id', 1)
+            .eq('id', balanceRecord.id)
             .select();
         
         if (error) {
@@ -503,14 +518,36 @@ export async function recalculateBalance() {
             return balance;
         }
         
-        // Cập nhật số dư vào bảng fund_balance
+        // Lấy ID của record hiện tại hoặc tạo mới nếu chưa có
+        let balanceRecord;
+        
+        const { data: existingBalance, error: fetchError } = await supabase
+            .from('fund_balance')
+            .select('id')
+            .limit(1)
+            .maybeSingle();
+            
+        if (fetchError) {
+            console.error('Lỗi khi kiểm tra fund_balance:', fetchError);
+            // Tạo mới record nếu lỗi
+            await updateFundBalance(data, null);
+            return data;
+        }
+        
+        if (!existingBalance) {
+            // Chưa có record, tạo mới
+            await updateFundBalance(data, null);
+            return data;
+        }
+        
+        // Cập nhật số dư vào bảng fund_balance với ID đúng
         await supabase
             .from('fund_balance')
             .update({
                 current_balance: data,
                 last_updated: new Date().toISOString()
             })
-            .eq('id', 1);
+            .eq('id', existingBalance.id);
         
         return data;
     } catch (error) {
@@ -525,19 +562,24 @@ export async function recalculateBalance() {
  * @returns {Promise<number>} Số dư thành viên
  */
 export async function getMemberBalance(memberName) {
-    // Đầu tiên, kiểm tra trong bảng member_balances
-    const { data, error } = await supabase
-        .from('member_balances')
-        .select('current_balance')
-        .eq('member_name', memberName)
-        .single();
-    
-    if (error || !data) {
-        console.log(`Chưa có dữ liệu số dư cho thành viên ${memberName}, sẽ tính toán lại`);
-        return calculateAndUpdateMemberBalance(memberName);
+    try {
+        // Đầu tiên, kiểm tra trong bảng member_balances
+        const { data, error } = await supabase
+            .from('member_balances')
+            .select('current_balance')
+            .eq('member_name', memberName)
+            .single();
+        
+        if (error || !data) {
+            console.log(`Chưa có dữ liệu số dư cho thành viên ${memberName}, sẽ tính toán lại`);
+            return calculateAndUpdateMemberBalance(memberName);
+        }
+        
+        return data.current_balance;
+    } catch (error) {
+        console.error(`Lỗi khi lấy số dư cho ${memberName}:`, error);
+        return 0;
     }
-    
-    return data.current_balance;
 }
 
 /**
@@ -593,11 +635,15 @@ export async function calculateAndUpdateMemberBalance(memberName) {
  * @returns {Promise<Object>} Kết quả cập nhật
  */
 export async function updateMemberBalance(memberName, newBalance, transactionId) {
+    // Convert newBalance to integer before saving to the database
+    // as the member_balances table expects an INTEGER type
+    const balanceAsInteger = Math.round(newBalance);
+
     const { data, error } = await supabase
         .from('member_balances')
         .upsert({
             member_name: memberName,
-            current_balance: newBalance,
+            current_balance: balanceAsInteger,
             last_transaction_id: transactionId,
             last_updated: new Date().toISOString()
         }, {
@@ -636,7 +682,11 @@ export async function getMembersNeedingNotification() {
     return data.filter(member => {
         return member.current_balance <= member.notification_threshold && 
                (!member.notified_at || new Date(member.notified_at) < sevenDaysAgo);
-    });
+    }).map(member => ({
+        member: member.member_name,
+        balance: member.current_balance,
+        threshold: member.notification_threshold || -50000
+    }));
 }
 
 /**

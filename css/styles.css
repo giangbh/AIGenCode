@@ -70,6 +70,13 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 .tab-pane.active {
     display: block;
 }
+/* Main Tab Content Styles */
+.tab-content {
+    display: none;
+}
+.tab-content.active {
+    display: block;
+}
 /* Login Modal Styles */
 #login-modal-backdrop {
     position: fixed;

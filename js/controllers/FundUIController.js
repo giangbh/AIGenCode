@@ -4,9 +4,9 @@
  */
 
 import { UIController } from './UIController.js';
-import { formatCurrency, formatAmountInput, parseFormattedAmount, getTodayDateString, showMessage, showModalMessage } from '../utils/helpers.js';
+import { formatCurrency, formatAmountInput, parseFormattedAmount, getTodayDateString, showMessage } from '../utils/helpers.js';
 import { isAdmin } from '../utils/auth.js';
-import { getMembersNeedingNotification, updateNotificationThreshold, markMemberNotified } from '../utils/storage.js';
+import { supabase } from '../utils/storage.js';
 
 export class FundUIController extends UIController {
     /**
@@ -196,12 +196,15 @@ export class FundUIController extends UIController {
         
         try {
             // Update threshold in database
-            await updateNotificationThreshold(memberName, threshold);
+            await supabase.updateNotificationThreshold(memberName, threshold);
             
-            showMessage(`Đã cập nhật ngưỡng nhắc nhở cho ${memberName}`, 'success');
+            showMessage(`Đã cập nhật ngưỡng nhắc nhở cho ${memberName} thành ${formatCurrency(threshold)}`, 'success');
+            
+            // Refresh member notifications
+            this.renderMemberNotifications();
         } catch (error) {
             console.error('Lỗi khi cập nhật ngưỡng nhắc nhở:', error);
-            showMessage(`Lỗi khi cập nhật ngưỡng nhắc nhở: ${error.message}`, 'error');
+            showMessage('Lỗi khi cập nhật ngưỡng nhắc nhở', 'error');
         }
     }
     
@@ -276,132 +279,101 @@ export class FundUIController extends UIController {
     }
     
     /**
-     * Render member notification panel
+     * Render member notifications
      */
     async renderMemberNotifications() {
-        const notificationContainer = document.getElementById('member-notifications');
-        if (!notificationContainer) return;
+        const memberNotificationsDiv = document.getElementById('member-notifications');
+        if (!memberNotificationsDiv) return;
         
         try {
-            // Lấy danh sách thành viên cần nhắc nhở
-            const members = await getMembersNeedingNotification();
+            // Get members needing notification
+            const membersNeedingNotification = await supabase.getMembersNeedingNotification();
             
-            notificationContainer.innerHTML = '';
-            
-            if (members.length === 0) {
-                notificationContainer.innerHTML = '<p class="text-gray-500 italic text-sm">Không có thành viên nào cần nhắc nhở nộp tiền</p>';
+            if (membersNeedingNotification.length === 0) {
+                memberNotificationsDiv.innerHTML = `
+                    <div class="text-sm text-gray-500 italic">
+                        Không có thành viên nào cần nhắc nhở nộp tiền.
+                    </div>
+                `;
                 return;
             }
             
-            // Tạo card thông báo
-            const notificationCard = document.createElement('div');
-            notificationCard.className = 'bg-yellow-50 p-3 rounded-lg border border-yellow-200';
+            // Create notifications for each member
+            memberNotificationsDiv.innerHTML = '';
             
-            const title = document.createElement('h4');
-            title.className = 'text-sm font-semibold text-yellow-800 mb-2 flex items-center';
-            title.innerHTML = '<i data-lucide="bell" class="w-4 h-4 mr-1"></i> Thành viên cần nộp tiền';
+            // Sort by balance (most negative first)
+            membersNeedingNotification.sort((a, b) => a.balance - b.balance);
             
-            const memberList = document.createElement('ul');
-            memberList.className = 'space-y-1';
-            
-            members.forEach(member => {
-                const item = document.createElement('li');
-                item.className = 'flex justify-between text-sm';
+            membersNeedingNotification.forEach(({ member, balance, threshold }) => {
+                const memberDiv = document.createElement('div');
+                memberDiv.className = 'notification-item bg-yellow-50 border border-yellow-200 rounded-md p-3 mb-2';
                 
-                const nameSpan = document.createElement('span');
-                nameSpan.textContent = member.member_name;
+                memberDiv.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <span class="font-medium text-yellow-800">${member}</span>
+                            <div class="text-sm text-red-600">
+                                Số dư: ${formatCurrency(balance)} 
+                                <span class="text-xs text-gray-500">(Ngưỡng: ${formatCurrency(threshold)})</span>
+                            </div>
+                        </div>
+                        <div>
+                            <button class="text-xs py-1 px-2 bg-green-500 text-white rounded hover:bg-green-600 notify-btn"
+                                    data-member="${member}" data-balance="${balance}">
+                                <i data-lucide="bell" class="w-3 h-3 mr-1"></i>
+                                Đã nhắc
+                            </button>
+                        </div>
+                    </div>
+                `;
                 
-                const balanceSpan = document.createElement('span');
-                balanceSpan.className = 'text-red-600 font-medium';
-                balanceSpan.textContent = formatCurrency(member.current_balance);
+                memberNotificationsDiv.appendChild(memberDiv);
                 
-                const notifyButton = document.createElement('button');
-                notifyButton.className = 'ml-2 text-xs bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-0.5 rounded';
-                notifyButton.textContent = 'Nhắc nhở';
-                notifyButton.onclick = () => this.notifyMember(member.member_name, member.current_balance);
-                
-                item.appendChild(nameSpan);
-                const actionDiv = document.createElement('div');
-                actionDiv.className = 'flex items-center';
-                actionDiv.appendChild(balanceSpan);
-                actionDiv.appendChild(notifyButton);
-                item.appendChild(actionDiv);
-                
-                memberList.appendChild(item);
+                // Add event listener to notify button
+                const notifyBtn = memberDiv.querySelector('.notify-btn');
+                if (notifyBtn) {
+                    notifyBtn.addEventListener('click', (e) => {
+                        const memberName = e.currentTarget.getAttribute('data-member');
+                        const balance = parseInt(e.currentTarget.getAttribute('data-balance'), 10);
+                        this.notifyMember(memberName, balance);
+                    });
+                }
             });
             
-            notificationCard.appendChild(title);
-            notificationCard.appendChild(memberList);
-            notificationContainer.appendChild(notificationCard);
-            
-            // Khởi tạo lại icon từ Lucide
-            if (window.lucide) {
-                window.lucide.createIcons();
+            // Initialize Lucide icons
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
             }
+            
         } catch (error) {
-            console.error('Lỗi khi lấy danh sách thành viên cần nhắc nhở:', error);
-            notificationContainer.innerHTML = '<p class="text-red-500 italic text-sm">Lỗi khi tải thông tin nhắc nhở</p>';
+            console.error('Lỗi khi tải thông tin nhắc nhở:', error);
+            memberNotificationsDiv.innerHTML = `
+                <div class="text-sm text-red-500">
+                    Lỗi khi tải thông tin nhắc nhở. Vui lòng thử lại sau.
+                </div>
+            `;
         }
     }
     
     /**
-     * Nhắc nhở thành viên nộp tiền
-     * @param {string} memberName Tên thành viên
-     * @param {number} balance Số dư hiện tại
+     * Mark member as notified
+     * @param {string} memberName - Name of the member
+     * @param {number} balance - Current balance
      */
-    notifyMember(memberName, balance) {
-        // Tạo tin nhắn nhắc nhở
-        const message = `Bạn hiện đang có số dư âm ${formatCurrency(balance)} trong quỹ nhóm CafeThu6. Vui lòng nộp tiền để cân đối số dư. Cảm ơn bạn!`;
-        
-        // Hiển thị modal xác nhận với các lựa chọn gửi tin nhắn
-        showModalMessage(
-            'Nhắc nhở nộp tiền',
-            `<p>Gửi nhắc nhở đến <strong>${memberName}</strong> với nội dung:</p>
-            <div class="my-3 p-3 bg-gray-50 rounded text-sm">${message}</div>
-            <div class="flex flex-wrap gap-2 mt-4">
-                <button id="copy-notify-btn" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-1.5 px-3 rounded">
-                    <i data-lucide="copy" class="w-4 h-4 inline-block mr-1"></i> Sao chép
-                </button>
-                <button id="sms-notify-btn" class="flex-1 bg-green-500 hover:bg-green-600 text-white py-1.5 px-3 rounded">
-                    <i data-lucide="message-square" class="w-4 h-4 inline-block mr-1"></i> SMS
-                </button>
-                <button id="email-notify-btn" class="flex-1 bg-purple-500 hover:bg-purple-600 text-white py-1.5 px-3 rounded">
-                    <i data-lucide="mail" class="w-4 h-4 inline-block mr-1"></i> Email
-                </button>
-            </div>`,
-            'Đóng'
-        );
-        
-        // Initialize Lucide icons
-        if (window.lucide) {
-            window.lucide.createIcons();
+    async notifyMember(memberName, balance) {
+        try {
+            // Mark as notified in database
+            await supabase.markMemberNotified(memberName);
+            
+            // Show success message
+            showMessage(`Đã đánh dấu thành viên ${memberName} là đã được nhắc nhở`, 'success');
+            
+            // Refresh the notifications
+            this.renderMemberNotifications();
+        } catch (error) {
+            console.error('Lỗi khi đánh dấu thành viên đã được nhắc nhở:', error);
+            showMessage('Lỗi khi đánh dấu thành viên đã được nhắc nhở', 'error');
         }
-        
-        // Xử lý sự kiện sao chép
-        document.getElementById('copy-notify-btn').onclick = () => {
-            navigator.clipboard.writeText(message);
-            showMessage('Đã sao chép tin nhắn nhắc nhở!', 'success');
-        };
-        
-        // Xử lý sự kiện gửi SMS
-        document.getElementById('sms-notify-btn').onclick = () => {
-            window.open(`sms:?body=${encodeURIComponent(message)}`);
-        };
-        
-        // Xử lý sự kiện gửi Email
-        document.getElementById('email-notify-btn').onclick = () => {
-            window.open(`mailto:?subject=Nhắc nhở nộp tiền quỹ CafeThu6&body=${encodeURIComponent(message)}`);
-        };
-        
-        // Cập nhật thời gian thông báo
-        markMemberNotified(memberName)
-            .then(() => {
-                console.log(`Đã cập nhật thời gian nhắc nhở cho ${memberName}`);
-                setTimeout(() => this.renderMemberNotifications(), 1000);
-            })
-            .catch(error => {
-                console.error(`Lỗi khi cập nhật thời gian nhắc nhở cho ${memberName}:`, error);
-            });
     }
     
     /**

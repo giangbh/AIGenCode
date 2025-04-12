@@ -34,14 +34,4 @@ WHERE name = 'TenThanhVien';
 
 ## Mật khẩu
 
-Tất cả người dùng đều sử dụng mật khẩu mặc định là `Cafe` (phân biệt chữ hoa/thường).
-
-## Tài liệu
-
-Tài liệu đầy đủ của ứng dụng có thể tìm thấy trong thư mục [docs](docs/):
-
-- [Đặc tả kỹ thuật](docs/specs/) - Tài liệu kỹ thuật chi tiết
-- [Hướng dẫn sử dụng](docs/guides/) - Hướng dẫn dành cho người dùng
-- [Tổng quan](docs/index.md) - Trang tổng quan về tài liệu
-
-Để xem tài liệu dưới dạng trang web, hãy truy cập http://localhost:8000/docs/index.md khi server đang chạy. 
+Tất cả người dùng đều sử dụng mật khẩu mặc định là `Cafe` (phân biệt chữ hoa/thường). 

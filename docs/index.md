@@ -24,6 +24,7 @@ CafeThu6 là ứng dụng web giúp nhóm bạn hoặc đồng nghiệp dễ dà
 ## Hướng dẫn sử dụng
 
 - [Hướng dẫn sử dụng](guides/huong_dan_su_dung.md) - Hướng dẫn chi tiết cách sử dụng CafeThu6
+- [Hướng dẫn xây dựng ứng dụng](guides/xay_dung_ung_dung.md) - Hướng dẫn chi tiết cách xây dựng ứng dụng CafeThu6 từ đầu
 
 ## SQL Scripts
 

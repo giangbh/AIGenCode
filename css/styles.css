@@ -56,26 +56,152 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
     color: #6b7280;
     cursor: pointer;
     transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 .tab-btn:hover {
     background-color: #e5e7eb;
+    color: #4b5563;
 }
 .tab-btn.active {
-    background-color: #3b82f6;
+    background-color: #0ea5e9;
     color: white;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(14, 165, 233, 0.2);
+}
+.tab-btn.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+    animation: shine 1.5s infinite;
+}
+@keyframes shine {
+    0% {
+        transform: translateX(-100%);
+    }
+    60%, 100% {
+        transform: translateX(100%);
+    }
 }
 .tab-pane {
     display: none;
 }
 .tab-pane.active {
     display: block;
+    animation: fadeIn 0.3s ease;
+}
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 /* Main Tab Content Styles */
 .tab-content {
     display: none;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: none;
 }
 .tab-content.active {
     display: block;
+    animation: fadeInUp 0.4s forwards;
+}
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+/* Mejora de estilos para los tabs principales */
+.tab-button {
+    position: relative;
+    transition: all 0.3s ease;
+    font-weight: 500;
+    border-bottom: 3px solid transparent;
+}
+/* Tab colores específicos */
+.tab-button[data-tab="expenses"] {
+    --tab-color: #16a34a; /* verde */
+    --tab-color-rgb: 22, 163, 74;
+}
+.tab-button[data-tab="group-fund"] {
+    --tab-color: #0ea5e9; /* azul */
+    --tab-color-rgb: 14, 165, 233;
+}
+.tab-button[data-tab="members"] {
+    --tab-color: #8b5cf6; /* púrpura */
+    --tab-color-rgb: 139, 92, 246;
+}
+.tab-button:hover {
+    background-color: rgba(var(--tab-color-rgb, 34, 197, 94), 0.1);
+    color: var(--tab-color, #16a34a);
+}
+.tab-button.active {
+    color: var(--tab-color, #16a34a);
+    border-bottom-color: var(--tab-color, #16a34a);
+    background-color: rgba(var(--tab-color-rgb, 34, 197, 94), 0.15);
+}
+.tab-button.active::after {
+    content: '';
+    position: absolute;
+    bottom: -3px;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background-color: var(--tab-color, #16a34a);
+    border-radius: 3px 3px 0 0;
+    box-shadow: 0 0 8px var(--tab-color, #16a34a);
+}
+
+/* Badge para tab activo */
+.tab-button.active::before {
+    content: '';
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 6px;
+    height: 6px;
+    background-color: var(--tab-color, #16a34a);
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(0.8);
+        opacity: 0.6;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(0.8);
+        opacity: 0.6;
+    }
+}
+.tab-button i {
+    transition: transform 0.2s ease;
+}
+.tab-button:hover i,
+.tab-button.active i {
+    transform: translateY(-1px);
 }
 /* Login Modal Styles */
 #login-modal-backdrop {
@@ -121,4 +247,68 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 #logout-button:hover {
     opacity: 1;
     transform: scale(1.1);
+}
+/* Estilos para el botón de refrescar datos */
+#refresh-data-btn {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+#refresh-data-btn:hover {
+    background-color: rgba(37, 99, 235, 0.1);
+    color: #2563eb;
+    border-color: #93c5fd;
+    transform: translateY(-1px);
+}
+
+#refresh-data-btn:active {
+    transform: translateY(0);
+}
+
+#refresh-data-btn i {
+    transition: transform 0.3s ease;
+}
+
+#refresh-data-btn:hover i {
+    transform: rotate(180deg);
+}
+
+/* Mejora de las cajas de encabezado en cada tab */
+#tab-content-expenses .bg-green-100,
+#tab-content-group-fund .bg-blue-100,
+#tab-content-members .bg-purple-100 {
+    border-left: 4px solid;
+    transition: all 0.3s ease;
+    transform: translateY(0);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+#tab-content-expenses .bg-green-100 {
+    border-color: #16a34a;
+}
+
+#tab-content-group-fund .bg-blue-100 {
+    border-color: #0ea5e9;
+}
+
+#tab-content-members .bg-purple-100 {
+    border-color: #8b5cf6;
+}
+
+.tab-content.active .bg-green-100,
+.tab-content.active .bg-blue-100,
+.tab-content.active .bg-purple-100 {
+    animation: slideIn 0.5s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 } 

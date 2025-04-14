@@ -180,6 +180,8 @@ export function updateAuthUI() {
     const currentUserDisplay = document.getElementById('current-user-display');
     const loginModal = document.getElementById('login-modal-backdrop');
     const clearAllDataBtn = document.getElementById('clear-all-data-btn');
+    const navbarUserContainer = document.querySelector('.current-user-container');
+    const logoutButtonNav = document.getElementById('logout-button-nav');
     
     if (currentUser) {
         // User is logged in, update display
@@ -193,10 +195,18 @@ export function updateAuthUI() {
             el.textContent = currentUser;
         });
         
-        // Show all user indicators
-        document.querySelectorAll('.current-user-indicator').forEach(el => {
-            el.classList.remove('hidden');
-        });
+        // Show navbar user container
+        if (navbarUserContainer) {
+            navbarUserContainer.classList.remove('hidden');
+        }
+        
+        // Setup logout button in navbar
+        if (logoutButtonNav) {
+            logoutButtonNav.addEventListener('click', () => {
+                logout();
+                location.reload();
+            });
+        }
         
         // Only show Clear All Data button if user is admin
         if (clearAllDataBtn) {
@@ -229,10 +239,10 @@ export function updateAuthUI() {
             currentUserDisplay.parentElement.classList.add('hidden');
         }
         
-        // Hide all user indicators
-        document.querySelectorAll('.current-user-indicator').forEach(el => {
-            el.classList.add('hidden');
-        });
+        // Hide navbar user container
+        if (navbarUserContainer) {
+            navbarUserContainer.classList.add('hidden');
+        }
         
         // Hide Clear All Data button
         if (clearAllDataBtn) {

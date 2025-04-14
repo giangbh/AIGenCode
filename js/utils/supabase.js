@@ -299,7 +299,7 @@ export async function getFundTransactions() {
     const { data, error } = await supabase
         .from('fund_transactions')
         .select('*')
-        .order('date', { ascending: false });
+        .order('created_at', { ascending: false });
     
     if (error) {
         console.error('Lỗi khi lấy danh sách giao dịch quỹ:', error);

@@ -248,30 +248,85 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
     opacity: 1;
     transform: scale(1.1);
 }
+/* Styles for user display in navbar */
+.current-user-container {
+    position: relative;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.current-user-container:hover {
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+}
+
+.current-user-container .current-user-name {
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#logout-button-nav {
+    transition: all 0.2s ease;
+    opacity: 0.7;
+}
+
+#logout-button-nav:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
 /* Estilos para el botón de refrescar datos */
 #refresh-data-btn {
     position: relative;
     overflow: hidden;
-    transition: all 0.3s ease;
+    transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background-color: transparent;
+    border: none;
 }
 
 #refresh-data-btn:hover {
-    background-color: rgba(37, 99, 235, 0.1);
+    background-color: rgba(239, 246, 255, 0.5);
     color: #2563eb;
-    border-color: #93c5fd;
-    transform: translateY(-1px);
+    transform: scale(1.1);
+    box-shadow: none;
+}
+
+#refresh-data-btn:focus {
+    outline: none;
+    box-shadow: none;
 }
 
 #refresh-data-btn:active {
-    transform: translateY(0);
+    transform: scale(0.95);
 }
 
 #refresh-data-btn i {
-    transition: transform 0.3s ease;
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 #refresh-data-btn:hover i {
     transform: rotate(180deg);
+}
+
+/* Trạng thái nút */
+#refresh-data-btn.loading {
+    background-color: transparent;
+    color: #3b82f6;
+    border: none;
+    pointer-events: none;
+}
+
+#refresh-data-btn.success {
+    background-color: transparent;
+    color: #10b981;
+    border: none;
+}
+
+#refresh-data-btn.error {
+    background-color: transparent;
+    color: #ef4444;
+    border: none;
 }
 
 /* Mejora de las cajas de encabezado en cada tab */
@@ -310,5 +365,26 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+
+#refresh-data-btn.loading i {
+    animation: spin 1.2s linear infinite;
+}
+
+/* Ripple animation on click */
+#refresh-data-btn.clicked .refresh-ripple {
+    opacity: 0.3;
+    animation: refresh-ripple-expand 0.6s ease-out;
+}
+
+@keyframes refresh-ripple-expand {
+    0% {
+        opacity: 0.3;
+        transform: scale(0);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(2.5);
     }
 } 

@@ -11,6 +11,7 @@ CafeThu6 là ứng dụng web giúp quản lý chi tiêu nhóm, tính toán và 
 - Chia đều hoặc tùy chỉnh số tiền cho từng người tham gia
 - Hiển thị chi tiết chi tiêu với người trả và người tham gia
 - Tự động tính toán kết quả chia tiền
+- **Gợi ý chi tiêu thông minh** dựa trên lịch sử giao dịch
 
 ### 2. Quản lý quỹ nhóm
 - Theo dõi số dư quỹ nhóm hiện tại
@@ -38,6 +39,12 @@ CafeThu6 là ứng dụng web giúp quản lý chi tiêu nhóm, tính toán và 
 - Lưu trữ dữ liệu trên Supabase
 - Đồng bộ hóa dữ liệu tự động
 - Truy cập dữ liệu từ nhiều thiết bị
+
+### 7. Gợi ý thông minh dựa trên lịch sử
+- Gợi ý tên chi tiêu và số tiền dựa trên lịch sử giao dịch
+- Phân tích tần suất chi tiêu để đề xuất chi tiêu phổ biến
+- Tự động lọc và đề xuất theo chi tiêu gần đây (trong vòng 3 tháng)
+- Giao diện trực quan và dễ sử dụng cho các gợi ý
 
 ## Cài đặt và cấu hình
 
@@ -70,6 +77,7 @@ CafeThu6 là ứng dụng web giúp quản lý chi tiêu nhóm, tính toán và 
 1. Thêm chi tiêu mới với tên, số tiền, ngày và người trả
 2. Chọn người tham gia và phương thức chia tiền
 3. Xem kết quả tính toán ở phần "Kết quả chia tiền"
+4. Sử dụng gợi ý thông minh để nhanh chóng chọn chi tiêu thường xuyên
 
 ### Quản lý quỹ
 1. Theo dõi số dư quỹ hiện tại

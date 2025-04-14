@@ -251,9 +251,10 @@ describe('ExpenseManager', () => {
       mockFundManager.updateBalance.calls.reset();
       mockFundManager.createTransaction.calls.reset();
       
-      // Delete the fund expense
+      // Delete the expense
       expenseManager.deleteExpense(fundExpense.id);
       
+      // Should restore the amount to fund
       expect(mockFundManager.updateBalance).toHaveBeenCalledWith(250000);
       expect(mockFundManager.createTransaction).toHaveBeenCalled();
     });
@@ -353,6 +354,411 @@ describe('ExpenseManager', () => {
       expect(results.balances['Quân'].paid).toBe(0);
       expect(results.balances['Quân'].owes).toBe(50000);
       expect(results.balances['Quân'].net).toBe(-50000);
+    });
+    
+    // New test cases for balance and calculation verification
+    
+    it('should handle fractional amounts in expense splits', () => {
+      // Add an expense with an amount that doesn't divide evenly
+      expenseManager.addExpense({
+        name: 'Odd Amount Expense',
+        amount: 100001, // 100.001 VND - not divisible by 3
+        date: '2025-04-10',
+        payer: 'Giang',
+        participants: ['Giang', 'Toàn', 'Quân'],
+        equalSplit: true
+      });
+      
+      const members = ['Giang', 'Toàn', 'Quân'];
+      const results = expenseManager.calculateResults(members);
+      
+      // Each participant should owe 33,333.67 VND (rounded)
+      // But the total should still add up to the original amount
+      const totalOwed = results.balances['Giang'].owes + 
+                        results.balances['Toàn'].owes + 
+                        results.balances['Quân'].owes;
+      
+      expect(totalOwed).toBe(100001); // Should match exact amount
+      expect(results.balances['Giang'].paid).toBe(100001);
+      
+      // Each person's share should be approximately 1/3 of the total
+      const expectedShare = 100001 / 3;
+      expect(results.balances['Giang'].owes).toBeCloseTo(expectedShare, 0); // Allow small rounding difference
+      expect(results.balances['Toàn'].owes).toBeCloseTo(expectedShare, 0);
+      expect(results.balances['Quân'].owes).toBeCloseTo(expectedShare, 0);
+    });
+    
+    it('should correctly calculate custom split expenses', () => {
+      // Add an expense with custom split
+      expenseManager.addExpense({
+        name: 'Custom Split Expense',
+        amount: 500000,
+        date: '2025-04-10',
+        payer: 'Toàn',
+        participants: ['Giang', 'Toàn', 'Quân'],
+        equalSplit: false,
+        splits: {
+          'Giang': 100000, // 20%
+          'Toàn': 300000,  // 60%
+          'Quân': 100000   // 20%
+        }
+      });
+      
+      const members = ['Giang', 'Toàn', 'Quân'];
+      const results = expenseManager.calculateResults(members);
+      
+      expect(results.balances['Giang'].owes).toBe(100000);
+      expect(results.balances['Toàn'].owes).toBe(300000);
+      expect(results.balances['Quân'].owes).toBe(100000);
+      
+      expect(results.balances['Toàn'].paid).toBe(500000);
+      expect(results.balances['Toàn'].net).toBe(200000); // 500k - 300k
+      
+      expect(results.balances['Giang'].net).toBe(-100000);
+      expect(results.balances['Quân'].net).toBe(-100000);
+    });
+    
+    it('should handle very large numbers correctly', () => {
+      // Add a large expense
+      expenseManager.addExpense({
+        name: 'Very Large Expense',
+        amount: 100000000, // 100 million VND
+        date: '2025-04-10',
+        payer: 'Giang',
+        participants: ['Giang', 'Toàn'],
+        equalSplit: true
+      });
+      
+      const members = ['Giang', 'Toàn'];
+      const results = expenseManager.calculateResults(members);
+      
+      expect(results.balances['Giang'].paid).toBe(100000000);
+      expect(results.balances['Giang'].owes).toBe(50000000); // Half of 100m
+      expect(results.balances['Giang'].net).toBe(50000000);
+      
+      expect(results.balances['Toàn'].paid).toBe(0);
+      expect(results.balances['Toàn'].owes).toBe(50000000);
+      expect(results.balances['Toàn'].net).toBe(-50000000);
+      
+      // Check that the transaction shows the correct amount
+      expect(results.transactions.length).toBe(1);
+      expect(results.transactions[0].from).toBe('Toàn');
+      expect(results.transactions[0].to).toBe('Giang');
+      expect(results.transactions[0].amount).toBe(50000000);
+    });
+    
+    it('should handle complex scenario with multiple expenses and splits', () => {
+      // Add several expenses with different payers and participants
+      
+      // Expense 1: Giang pays for everyone
+      expenseManager.addExpense({
+        name: 'Lunch',
+        amount: 300000,
+        date: '2025-04-10',
+        payer: 'Giang',
+        participants: ['Giang', 'Toàn', 'Quân'],
+        equalSplit: true
+      });
+      
+      // Expense 2: Toàn pays for himself and Giang
+      expenseManager.addExpense({
+        name: 'Coffee',
+        amount: 100000,
+        date: '2025-04-10',
+        payer: 'Toàn',
+        participants: ['Giang', 'Toàn'],
+        equalSplit: true
+      });
+      
+      // Expense 3: Quân pays for everyone with custom split
+      expenseManager.addExpense({
+        name: 'Dinner',
+        amount: 400000,
+        date: '2025-04-10',
+        payer: 'Quân',
+        participants: ['Giang', 'Toàn', 'Quân'],
+        equalSplit: false,
+        splits: {
+          'Giang': 150000,
+          'Toàn': 150000,
+          'Quân': 100000
+        }
+      });
+      
+      // Expense 4: Group fund pays for everyone
+      expenseManager.addExpense({
+        name: 'Group Activity',
+        amount: 450000,
+        date: '2025-04-10',
+        payer: '__GROUP_FUND__',
+        participants: ['Giang', 'Toàn', 'Quân'],
+        equalSplit: true
+      });
+      
+      const members = ['Giang', 'Toàn', 'Quân'];
+      const results = expenseManager.calculateResults(members);
+      
+      // Expected values:
+      // Giang: Paid 300k, Owes 100k for Lunch, 50k for Coffee, 150k for Dinner = 300k
+      // Toàn: Paid 100k, Owes 100k for Lunch, 50k for Coffee, 150k for Dinner = 300k
+      // Quân: Paid 400k, Owes 100k for Lunch, 0 for Coffee, 100k for Dinner = 200k
+      // Group fund expense is ignored for settlement
+      
+      expect(results.hasNonFundExpenses).toBe(true);
+      
+      expect(results.balances['Giang'].paid).toBe(300000);
+      expect(results.balances['Giang'].owes).toBe(300000);
+      expect(results.balances['Giang'].net).toBe(0); // Net zero
+      
+      expect(results.balances['Toàn'].paid).toBe(100000);
+      expect(results.balances['Toàn'].owes).toBe(300000);
+      expect(results.balances['Toàn'].net).toBe(-200000); // Net -200k
+      
+      expect(results.balances['Quân'].paid).toBe(400000);
+      expect(results.balances['Quân'].owes).toBe(200000);
+      expect(results.balances['Quân'].net).toBe(200000); // Net +200k
+      
+      // Verify transactions - Toàn should pay Quân 200k
+      expect(results.transactions.length).toBe(1);
+      expect(results.transactions[0].from).toBe('Toàn');
+      expect(results.transactions[0].to).toBe('Quân');
+      expect(results.transactions[0].amount).toBe(200000);
+    });
+    
+    it('should handle multiple payers with minimal transactions', () => {
+      // Set up test expenses where everyone has paid something
+      expenseManager.addExpense({
+        name: 'Giang Paid',
+        amount: 100000,
+        date: '2025-04-10',
+        payer: 'Giang',
+        participants: ['Giang', 'Toàn', 'Quân', 'Trung'],
+        equalSplit: true
+      });
+      
+      expenseManager.addExpense({
+        name: 'Toàn Paid',
+        amount: 80000,
+        date: '2025-04-10',
+        payer: 'Toàn',
+        participants: ['Giang', 'Toàn', 'Quân', 'Trung'],
+        equalSplit: true
+      });
+      
+      expenseManager.addExpense({
+        name: 'Quân Paid',
+        amount: 120000,
+        date: '2025-04-10',
+        payer: 'Quân',
+        participants: ['Giang', 'Toàn', 'Quân', 'Trung'],
+        equalSplit: true
+      });
+      
+      expenseManager.addExpense({
+        name: 'Trung Paid',
+        amount: 60000,
+        date: '2025-04-10',
+        payer: 'Trung',
+        participants: ['Giang', 'Toàn', 'Quân', 'Trung'],
+        equalSplit: true
+      });
+      
+      const members = ['Giang', 'Toàn', 'Quân', 'Trung'];
+      const results = expenseManager.calculateResults(members);
+      
+      // Total expenses: 360k
+      // Per person share: 90k
+      // Giang: paid 100k, owes 90k, net +10k
+      // Toàn: paid 80k, owes 90k, net -10k
+      // Quân: paid 120k, owes 90k, net +30k
+      // Trung: paid 60k, owes 90k, net -30k
+      
+      // Verify balances are correct
+      expect(results.balances['Giang'].net).toBe(10000);
+      expect(results.balances['Toàn'].net).toBe(-10000);
+      expect(results.balances['Quân'].net).toBe(30000);
+      expect(results.balances['Trung'].net).toBe(-30000);
+      
+      // The algorithm should minimize transactions:
+      // Toàn should pay Giang 10k
+      // Trung should pay Quân 30k
+      expect(results.transactions.length).toBe(2);
+      
+      // Find the transactions
+      const toanToGiang = results.transactions.find(t => 
+        t.from === 'Toàn' && t.to === 'Giang'
+      );
+      
+      const trungToQuan = results.transactions.find(t => 
+        t.from === 'Trung' && t.to === 'Quân'
+      );
+      
+      expect(toanToGiang).toBeDefined();
+      expect(toanToGiang.amount).toBe(10000);
+      
+      expect(trungToQuan).toBeDefined();
+      expect(trungToQuan.amount).toBe(30000);
+    });
+  });
+
+  describe('getExpenseSuggestions', () => {
+    beforeEach(() => {
+      // Reset to clean state
+      expenseManager = new ExpenseManager(mockFundManager);
+    });
+    
+    it('should return empty array when no expenses exist', () => {
+      const suggestions = expenseManager.getExpenseSuggestions();
+      expect(suggestions).toEqual([]);
+    });
+    
+    it('should generate suggestions based on past expenses', () => {
+      // Set up test expenses with the same name but different amounts
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const lastWeek = new Date(today);
+      lastWeek.setDate(lastWeek.getDate() - 7);
+      
+      // Convert dates to YYYY-MM-DD format
+      const todayStr = today.toISOString().split('T')[0];
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      const lastWeekStr = lastWeek.toISOString().split('T')[0];
+      
+      // Add expenses
+      expenseManager.addExpense({
+        name: 'Ăn trưa',
+        amount: 100000,
+        date: todayStr,
+        payer: 'Giang',
+        participants: ['Giang', 'Toàn'],
+        equalSplit: true
+      });
+      
+      expenseManager.addExpense({
+        name: 'Ăn trưa',  // Same name
+        amount: 100000,    // Same amount
+        date: yesterdayStr,
+        payer: 'Toàn',
+        participants: ['Giang', 'Toàn'],
+        equalSplit: true
+      });
+      
+      expenseManager.addExpense({
+        name: 'Cafe',
+        amount: 50000,
+        date: lastWeekStr,
+        payer: 'Giang',
+        participants: ['Giang', 'Toàn', 'Quân'],
+        equalSplit: true
+      });
+      
+      // Get suggestions
+      const suggestions = expenseManager.getExpenseSuggestions();
+      
+      // Verify suggestions
+      expect(suggestions.length).toBeGreaterThan(0);
+      
+      // "Ăn trưa" should be the first suggestion with amount 100000
+      const lunchSuggestion = suggestions.find(s => s.name === 'Ăn trưa');
+      expect(lunchSuggestion).toBeDefined();
+      expect(lunchSuggestion.amount).toBe(100000);
+      expect(lunchSuggestion.frequency).toBe(2);
+      
+      // "Cafe" should also be in suggestions
+      const cafeSuggestion = suggestions.find(s => s.name === 'Cafe');
+      expect(cafeSuggestion).toBeDefined();
+      expect(cafeSuggestion.amount).toBe(50000);
+      expect(cafeSuggestion.frequency).toBe(1);
+      
+      // "Ăn trưa" should appear before "Cafe" since it's more frequent
+      expect(suggestions.indexOf(lunchSuggestion)).toBeLessThan(suggestions.indexOf(cafeSuggestion));
+    });
+    
+    it('should ignore expenses older than 3 months', () => {
+      // Current date
+      const today = new Date();
+      
+      // Date 4 months ago
+      const fourMonthsAgo = new Date(today);
+      fourMonthsAgo.setMonth(fourMonthsAgo.getMonth() - 4);
+      
+      // Convert to YYYY-MM-DD format
+      const todayStr = today.toISOString().split('T')[0];
+      const fourMonthsAgoStr = fourMonthsAgo.toISOString().split('T')[0];
+      
+      // Add a recent expense
+      expenseManager.addExpense({
+        name: 'Chi tiêu gần đây',
+        amount: 80000,
+        date: todayStr,
+        payer: 'Giang',
+        participants: ['Giang', 'Toàn'],
+        equalSplit: true
+      });
+      
+      // Add an old expense
+      expenseManager.addExpense({
+        name: 'Chi tiêu cũ',
+        amount: 120000,
+        date: fourMonthsAgoStr,
+        payer: 'Toàn',
+        participants: ['Giang', 'Toàn'],
+        equalSplit: true
+      });
+      
+      // Get suggestions
+      const suggestions = expenseManager.getExpenseSuggestions();
+      
+      // Recent expense should be in suggestions
+      const recentSuggestion = suggestions.find(s => s.name === 'Chi tiêu gần đây');
+      expect(recentSuggestion).toBeDefined();
+      
+      // Old expense should be ignored
+      const oldSuggestion = suggestions.find(s => s.name === 'Chi tiêu cũ');
+      expect(oldSuggestion).toBeUndefined();
+    });
+    
+    it('should suggest most frequently used amount for an expense name', () => {
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      
+      // Add same expense with different amounts
+      expenseManager.addExpense({
+        name: 'Ăn tối',
+        amount: 150000, // This amount appears twice
+        date: todayStr,
+        payer: 'Giang',
+        participants: ['Giang', 'Toàn'],
+        equalSplit: true
+      });
+      
+      expenseManager.addExpense({
+        name: 'Ăn tối',
+        amount: 150000, // Same amount again
+        date: todayStr,
+        payer: 'Toàn',
+        participants: ['Giang', 'Toàn'],
+        equalSplit: true
+      });
+      
+      expenseManager.addExpense({
+        name: 'Ăn tối',
+        amount: 200000, // Different amount
+        date: todayStr,
+        payer: 'Quân',
+        participants: ['Giang', 'Toàn', 'Quân'],
+        equalSplit: true
+      });
+      
+      // Get suggestions
+      const suggestions = expenseManager.getExpenseSuggestions();
+      
+      // "Ăn tối" should suggest 150000 as the amount since it's more frequent
+      const dinnerSuggestion = suggestions.find(s => s.name === 'Ăn tối');
+      expect(dinnerSuggestion).toBeDefined();
+      expect(dinnerSuggestion.amount).toBe(150000);
+      expect(dinnerSuggestion.frequency).toBe(3); // Total frequency is 3
     });
   });
 }); 

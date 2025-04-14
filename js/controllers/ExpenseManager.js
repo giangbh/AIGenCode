@@ -436,4 +436,99 @@ export class ExpenseManager {
             }
         };
     }
+
+    getExpenseSuggestions() {
+        // Phân tích các chi tiêu hiện có để tạo đề xuất
+        const suggestions = [];
+        
+        // Nếu không có chi tiêu nào, trả về mảng rỗng
+        if (this.expenses.length === 0) {
+            return suggestions;
+        }
+        
+        // Thống kê tần suất xuất hiện của tên chi tiêu và số tiền tương ứng
+        const expenseStats = {};
+        
+        this.expenses.forEach(expense => {
+            // Bỏ qua những chi tiêu quá cũ (trên 3 tháng)
+            const expenseDate = new Date(expense.date);
+            const threeMonthsAgo = new Date();
+            threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+            
+            if (expenseDate < threeMonthsAgo) {
+                return;
+            }
+            
+            const name = expense.name;
+            const amount = expense.amount;
+            
+            if (!expenseStats[name]) {
+                expenseStats[name] = {
+                    count: 0,
+                    amounts: [],
+                    lastUsed: expenseDate
+                };
+            }
+            
+            expenseStats[name].count += 1;
+            expenseStats[name].amounts.push(amount);
+            
+            // Cập nhật ngày sử dụng gần nhất
+            if (expenseDate > expenseStats[name].lastUsed) {
+                expenseStats[name].lastUsed = expenseDate;
+            }
+        });
+        
+        // Chuyển đổi thống kê thành danh sách đề xuất
+        for (const name in expenseStats) {
+            const stat = expenseStats[name];
+            
+            // Tính số tiền phổ biến nhất hoặc trung bình
+            let suggestedAmount;
+            
+            if (stat.amounts.length > 0) {
+                // Nếu chi tiêu này xuất hiện nhiều lần với cùng số tiền
+                const amountFrequency = {};
+                let maxFreq = 0;
+                let mostFrequentAmount = stat.amounts[0];
+                
+                stat.amounts.forEach(amount => {
+                    amountFrequency[amount] = (amountFrequency[amount] || 0) + 1;
+                    if (amountFrequency[amount] > maxFreq) {
+                        maxFreq = amountFrequency[amount];
+                        mostFrequentAmount = amount;
+                    }
+                });
+                
+                // Nếu có một số tiền xuất hiện nhiều lần, sử dụng nó
+                if (maxFreq > 1) {
+                    suggestedAmount = mostFrequentAmount;
+                } else {
+                    // Nếu không, sử dụng số tiền gần đây nhất
+                    suggestedAmount = stat.amounts[stat.amounts.length - 1];
+                }
+            }
+            
+            suggestions.push({
+                name: name,
+                amount: suggestedAmount,
+                frequency: stat.count,
+                lastUsed: stat.lastUsed
+            });
+        }
+        
+        // Sắp xếp đề xuất theo tần suất (giảm dần) và thời gian sử dụng gần nhất
+        suggestions.sort((a, b) => {
+            // Ưu tiên sử dụng tần suất
+            if (b.frequency !== a.frequency) {
+                return b.frequency - a.frequency;
+            }
+            
+            // Nếu tần suất bằng nhau, ưu tiên thời gian sử dụng gần đây hơn
+            return b.lastUsed - a.lastUsed;
+        });
+        
+        // Giới hạn số lượng đề xuất
+        return suggestions.slice(0, 5);
+    }
 } 

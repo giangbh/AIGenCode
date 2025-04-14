@@ -437,6 +437,29 @@ export class ExpenseManager {
         };
     }
 
+    /**
+     * Get paginated expenses from the server
+     * @param {number} page - The page number (1-based)
+     * @param {number} perPage - Number of items per page
+     * @param {string} sortBy - Field to sort by
+     * @param {boolean} descending - Whether to sort in descending order
+     * @returns {Promise<Object>} Pagination result object with expenses
+     */
+    async getPaginatedExpensesFromServer(page = 1, perPage = 5, sortBy = 'date', descending = true) {
+        try {
+            const result = await supabase.getPaginatedExpenses(page, perPage, sortBy, descending);
+            
+            // Transform expense objects to Expense instances
+            result.items = result.items.map(expenseData => Expense.fromObject(expenseData));
+            
+            return result;
+        } catch (error) {
+            console.error('Lỗi khi lấy chi tiêu phân trang:', error);
+            // Fallback to client-side pagination if server-side fails
+            return this.getPaginatedExpenses(page, perPage, sortBy, descending);
+        }
+    }
+
     getExpenseSuggestions() {
         // Phân tích các chi tiêu hiện có để tạo đề xuất
         const suggestions = [];

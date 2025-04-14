@@ -164,7 +164,5 @@ export function invalidateCache(type) {
     }
 }
 
-/**
- * API Supabase cho controllers
- */
+// Exporting supabase client
 export const supabase = supabaseClient; 

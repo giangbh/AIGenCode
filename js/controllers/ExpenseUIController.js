@@ -332,10 +332,32 @@ export class ExpenseUIController extends UIController {
     /**
      * Render expense list
      */
-    renderExpenseList() {
+    async renderExpenseList() {
         this.expenseList.innerHTML = '';
+        
+        // Show loading indicator 
+        const loadingIndicator = document.createElement('div');
+        loadingIndicator.className = 'text-center p-4';
+        loadingIndicator.innerHTML = `
+            <div class="inline-block animate-spin w-6 h-6 border-2 border-gray-300 border-t-green-600 rounded-full"></div>
+            <p class="mt-2 text-gray-600">Đang tải chi tiêu...</p>
+        `;
+        this.expenseList.appendChild(loadingIndicator);
+
+        // Get paginated expenses from server
+        const paginatedData = await this.app.expenseManager.getPaginatedExpensesFromServer(
+            this.currentPage, 
+            5, // items per page
+            this.sortField, 
+            this.sortDirection
+        );
+        
+        // Clear loading indicator
+        this.expenseList.innerHTML = '';
+        
         const expenses = this.app.expenseManager.getAllExpenses();
         
+        // Show message if no expenses yet
         if (expenses.length === 0) {
             this.noExpensesMessage.classList.remove('hidden');
             return;
@@ -400,14 +422,15 @@ export class ExpenseUIController extends UIController {
         controlsContainer.appendChild(sortingLabel);
         controlsContainer.appendChild(toggleAllBtn);
         
+        // Sort buttons container
+        const sortButtonsContainer = document.createElement('div');
+        sortButtonsContainer.className = 'flex flex-wrap gap-2';
+        
         const sortOptions = [
             { value: 'date', label: 'Ngày' },
             { value: 'amount', label: 'Số tiền' },
             { value: 'name', label: 'Tên chi tiêu' }
         ];
-        
-        const sortButtonsContainer = document.createElement('div');
-        sortButtonsContainer.className = 'flex flex-wrap gap-2';
         
         sortOptions.forEach(option => {
             const sortButton = document.createElement('button');
@@ -424,7 +447,7 @@ export class ExpenseUIController extends UIController {
                 sortButton.textContent = option.label;
             }
             
-            sortButton.addEventListener('click', () => {
+            sortButton.addEventListener('click', async () => {
                 if (this.sortField === option.value) {
                     // Toggle direction if sorting by same field
                     this.sortDirection = !this.sortDirection;
@@ -436,7 +459,7 @@ export class ExpenseUIController extends UIController {
                 
                 // Reset to first page when changing sort
                 this.currentPage = 1;
-                this.renderExpenseList();
+                await this.renderExpenseList();
             });
             
             sortButtonsContainer.appendChild(sortButton);
@@ -447,13 +470,6 @@ export class ExpenseUIController extends UIController {
         this.expenseList.appendChild(sortingControls);
         
         // Get paginated expenses
-        const paginatedData = this.app.expenseManager.getPaginatedExpenses(
-            this.currentPage, 
-            5, // items per page
-            this.sortField, 
-            this.sortDirection
-        );
-        
         const { items: currentPageItems, pagination } = paginatedData;
         const { currentPage, totalPages, startIndex, endIndex, totalItems } = pagination;
         
@@ -779,26 +795,14 @@ export class ExpenseUIController extends UIController {
     }
     
     /**
-     * Change current page
-     * @param {number} page Page number to navigate to
+     * Change page in expense list
+     * @param {number} page - The page number to change to
      */
-    changePage(page) {
-        this.currentPage = page;
-        this.renderExpenseList();
-        
-        // Reset expand/collapse all button to collapsed state
-        const toggleAllBtn = this.expenseList.querySelector('[data-expanded]');
-        if (toggleAllBtn) {
-            toggleAllBtn.dataset.expanded = 'false';
-            toggleAllBtn.innerHTML = '<i data-lucide="chevrons-down" class="w-3 h-3 mr-1"></i> Mở rộng tất cả';
-            // Re-initialize icon
-            lucide.createIcons({
-                scope: toggleAllBtn
-            });
+    async changePage(page) {
+        if (this.currentPage !== page) {
+            this.currentPage = page;
+            await this.renderExpenseList();
         }
-        
-        // Scroll back to the top of the expense list
-        document.getElementById('expense-list-section').scrollIntoView({ behavior: 'smooth' });
     }
     
     /**

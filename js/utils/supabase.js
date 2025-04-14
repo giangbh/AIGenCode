@@ -125,6 +125,78 @@ export async function getExpenses() {
 }
 
 /**
+ * Lấy chi tiêu với phân trang từ Supabase
+ * @param {number} page - Số trang (bắt đầu từ 1)
+ * @param {number} perPage - Số mục trên mỗi trang
+ * @param {string} sortBy - Trường để sắp xếp theo
+ * @param {boolean} descending - Có sắp xếp theo thứ tự giảm dần không
+ * @returns {Promise<Object>} Kết quả phân trang
+ */
+export async function getPaginatedExpenses(page = 1, perPage = 5, sortBy = 'date', descending = true) {
+    // Xác định trường sắp xếp
+    let orderField = 'created_at';
+    if (sortBy === 'date') orderField = 'date';
+    else if (sortBy === 'amount') orderField = 'amount';
+    else if (sortBy === 'name') orderField = 'name';
+    
+    // Tính toán từng mục bắt đầu và kết thúc
+    const startIndex = (page - 1) * perPage;
+    
+    // Đầu tiên, lấy tổng số chi tiêu để tính tổng số trang
+    const countResult = await supabase
+        .from('expenses')
+        .select('id', { count: 'exact', head: true });
+    
+    if (countResult.error) {
+        console.error('Lỗi khi đếm chi tiêu:', countResult.error);
+        return { items: [], pagination: { currentPage: 1, totalPages: 0, totalItems: 0 } };
+    }
+    
+    const totalItems = countResult.count;
+    
+    // Sau đó lấy dữ liệu cho trang hiện tại
+    const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .order(orderField, { ascending: !descending })
+        .range(startIndex, startIndex + perPage - 1);
+    
+    if (error) {
+        console.error('Lỗi khi lấy danh sách chi tiêu phân trang:', error);
+        return { items: [], pagination: { currentPage: 1, totalPages: 0, totalItems: 0 } };
+    }
+    
+    // Chuyển đổi dữ liệu từ định dạng DB sang định dạng ứng dụng
+    const items = data.map(expense => ({
+        id: expense.id,
+        name: expense.name,
+        amount: expense.amount,
+        date: expense.date,
+        payer: expense.payer,
+        participants: expense.participants,
+        equalSplit: expense.equal_split,
+        splits: expense.splits || {}
+    }));
+    
+    // Tính toán chi tiết phân trang
+    const totalPages = Math.ceil(totalItems / perPage);
+    const currentPage = Math.max(1, Math.min(page, totalPages));
+    const endIndex = Math.min(startIndex + items.length, totalItems);
+    
+    return {
+        items,
+        pagination: {
+            currentPage,
+            perPage,
+            totalItems,
+            totalPages,
+            startIndex,
+            endIndex
+        }
+    };
+}
+
+/**
  * Thêm chi tiêu mới
  * @param {Object} expense Dữ liệu chi tiêu
  * @returns {Promise<Object>} Chi tiêu được thêm
@@ -743,6 +815,7 @@ export default {
     updateMember,
     deleteMember,
     getExpenses,
+    getPaginatedExpenses,
     addExpense,
     updateExpense,
     deleteExpense,

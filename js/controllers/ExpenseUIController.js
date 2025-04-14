@@ -73,6 +73,11 @@ export class ExpenseUIController extends UIController {
         this.expenseNameInput.addEventListener('input', () => {
             this.showNameAutocomplete();
         });
+        
+        // Add keyboard event listeners for name input
+        this.expenseNameInput.addEventListener('keydown', (e) => {
+            this.handleNameInputKeypress(e);
+        });
 
         // Thêm sự kiện focus cho trường nhập số tiền
         this.expenseAmountInput.addEventListener('focus', () => {
@@ -1395,16 +1400,18 @@ export class ExpenseUIController extends UIController {
         container.style.width = '100%';
         container.style.zIndex = '100';
         
+        // Get current input value
+        const currentValue = this.expenseNameInput.value.trim().toLowerCase();
+        
         // If no suggestions were provided, try to get them from the expense manager
         if (!suggestions || suggestions.length === 0) {
-            const currentValue = this.expenseNameInput.value.trim().toLowerCase();
             const allSuggestions = this.app.expenseManager.getExpenseSuggestions();
             
             // Filter suggestions based on the current input value
             suggestions = allSuggestions
                 .map(s => s.name)
                 .filter(name => currentValue === '' || name.toLowerCase().includes(currentValue))
-                .slice(0, 5); // Limit to 5 suggestions
+                .slice(0, 6); // Limit to 6 suggestions
         }
         
         if (suggestions.length === 0) {
@@ -1412,10 +1419,34 @@ export class ExpenseUIController extends UIController {
             return;
         }
         
-        suggestions.forEach(suggestion => {
+        // Add keyboard navigation tip at the top if there are suggestions
+        const keyboardTip = document.createElement('div');
+        keyboardTip.className = 'text-xs text-gray-500 px-3 py-2 border-b border-gray-100';
+        keyboardTip.innerHTML = '<span class="opacity-75">Navigate: <kbd class="px-1 py-0.5 bg-gray-100 rounded border border-gray-300">↑</kbd> <kbd class="px-1 py-0.5 bg-gray-100 rounded border border-gray-300">↓</kbd> Select: <kbd class="px-1 py-0.5 bg-gray-100 rounded border border-gray-300">Enter</kbd></span>';
+        container.appendChild(keyboardTip);
+        
+        suggestions.forEach((suggestion, index) => {
             const div = document.createElement('div');
-            div.innerHTML = suggestion;
-            div.classList.add('suggestion-item');
+            div.className = 'autocomplete-item';
+            div.setAttribute('data-index', index);
+            
+            // Highlight matching text if there's input
+            if (currentValue && suggestion.toLowerCase().includes(currentValue)) {
+                const matchIndex = suggestion.toLowerCase().indexOf(currentValue);
+                const beforeMatch = suggestion.substring(0, matchIndex);
+                const match = suggestion.substring(matchIndex, matchIndex + currentValue.length);
+                const afterMatch = suggestion.substring(matchIndex + currentValue.length);
+                
+                div.innerHTML = `<span class="autocomplete-item-name">${beforeMatch}<span class="bg-yellow-100 text-yellow-800">${match}</span>${afterMatch}</span>`;
+            } else {
+                div.innerHTML = `<span class="autocomplete-item-name">${suggestion}</span>`;
+            }
+            
+            // Add a subtle icon to enhance the UI
+            const icon = document.createElement('span');
+            icon.className = 'text-blue-400';
+            icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-corner-down-left"><polyline points="9 10 4 15 9 20"></polyline><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg>';
+            div.appendChild(icon);
             
             div.addEventListener('click', () => {
                 inputElement.value = suggestion;
@@ -1428,6 +1459,22 @@ export class ExpenseUIController extends UIController {
             
             container.appendChild(div);
         });
+        
+        // Add mouseover event to highlight items
+        const items = container.querySelectorAll('.autocomplete-item');
+        items.forEach(item => {
+            item.addEventListener('mouseover', () => {
+                // Remove active class from all items
+                items.forEach(i => i.classList.remove('active'));
+                // Add active class to current item
+                item.classList.add('active');
+            });
+        });
+        
+        // Set the first item as active by default
+        if (items.length > 0) {
+            items[0].classList.add('active');
+        }
     }
     
     /**
@@ -1470,14 +1517,38 @@ export class ExpenseUIController extends UIController {
             return;
         }
         
+        // Add keyboard navigation tip at the top if there are suggestions
+        const keyboardTip = document.createElement('div');
+        keyboardTip.className = 'text-xs text-gray-500 px-3 py-2 border-b border-gray-100';
+        keyboardTip.innerHTML = '<span class="opacity-75">Navigate: <kbd class="px-1 py-0.5 bg-gray-100 rounded border border-gray-300">↑</kbd> <kbd class="px-1 py-0.5 bg-gray-100 rounded border border-gray-300">↓</kbd> Select: <kbd class="px-1 py-0.5 bg-gray-100 rounded border border-gray-300">Enter</kbd></span>';
+        container.appendChild(keyboardTip);
+        
         // Hiển thị các gợi ý
-        matchingSuggestions.forEach(suggestion => {
+        matchingSuggestions.forEach((suggestion, index) => {
             const item = document.createElement('div');
             item.className = 'autocomplete-item';
+            item.setAttribute('data-index', index);
+            item.setAttribute('data-amount', suggestion.amount);
+            item.setAttribute('data-name', suggestion.name);
             
+            // Create content with highlighted amount if matching
+            const amountString = suggestion.amount.toString();
             const amountSpan = document.createElement('span');
             amountSpan.className = 'autocomplete-item-name';
-            amountSpan.textContent = formatCurrency(suggestion.amount);
+            
+            if (currentValue > 0 && amountString.includes(currentValue.toString())) {
+                const matchIndex = amountString.indexOf(currentValue.toString());
+                const beforeMatch = amountString.substring(0, matchIndex);
+                const match = amountString.substring(matchIndex, matchIndex + currentValue.toString().length);
+                const afterMatch = amountString.substring(matchIndex + currentValue.toString().length);
+                
+                amountSpan.innerHTML = `${beforeMatch}<span class="bg-yellow-100 text-yellow-800">${match}</span>${afterMatch}`;
+            } else {
+                amountSpan.textContent = amountString;
+            }
+            
+            // Format the amount for display
+            amountSpan.innerHTML = formatCurrency(suggestion.amount);
             
             const nameSpan = document.createElement('span');
             nameSpan.className = 'autocomplete-item-amount';
@@ -1485,6 +1556,12 @@ export class ExpenseUIController extends UIController {
             
             item.appendChild(amountSpan);
             item.appendChild(nameSpan);
+            
+            // Add a subtle icon to enhance the UI
+            const icon = document.createElement('span');
+            icon.className = 'text-blue-400 ml-1';
+            icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-corner-down-left"><polyline points="9 10 4 15 9 20"></polyline><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg>';
+            item.appendChild(icon);
             
             // Xử lý sự kiện khi nhấp vào gợi ý
             item.addEventListener('click', () => {
@@ -1494,13 +1571,187 @@ export class ExpenseUIController extends UIController {
                     this.expenseNameInput.value = suggestion.name;
                 }
                 this.closeAllAutocomplete();
+                
+                // Focus on participants dropdown for better UX flow
+                this.payerSelect.focus();
             });
             
             container.appendChild(item);
         });
         
+        // Add mouseover event to highlight items
+        const items = container.querySelectorAll('.autocomplete-item');
+        items.forEach(item => {
+            item.addEventListener('mouseover', () => {
+                // Remove active class from all items
+                items.forEach(i => i.classList.remove('active'));
+                // Add active class to current item
+                item.classList.add('active');
+            });
+        });
+        
+        // Set the first item as active by default
+        if (items.length > 0) {
+            items[0].classList.add('active');
+        }
+        
         // Hiển thị dropdown
         container.classList.remove('hidden');
+        
+        // Add keyboard event handler for the amount input
+        input.addEventListener('keydown', this.handleAmountInputKeypress.bind(this));
+    }
+    
+    /**
+     * Handle keyboard navigation for the amount autocomplete
+     */
+    handleAmountInputKeypress(e) {
+        // Only process keyboard events when the dropdown is visible
+        const container = document.getElementById('expense-amount-suggestions');
+        if (!container || container.classList.contains('hidden')) return;
+        
+        const items = container.querySelectorAll('.autocomplete-item');
+        if (items.length === 0) return;
+        
+        let activeItem = container.querySelector('.autocomplete-item.active');
+        let activeIndex = activeItem ? parseInt(activeItem.getAttribute('data-index')) : -1;
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            
+            // Remove active class from current item
+            if (activeItem) {
+                activeItem.classList.remove('active');
+            }
+            
+            // Calculate next index (with wrap-around)
+            activeIndex = (activeIndex + 1) % items.length;
+            
+            // Add active class to new item
+            items[activeIndex].classList.add('active');
+            
+            // Ensure the active item is visible by scrolling if needed
+            items[activeIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } 
+        else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            
+            // Remove active class from current item
+            if (activeItem) {
+                activeItem.classList.remove('active');
+            }
+            
+            // Calculate previous index (with wrap-around)
+            activeIndex = activeIndex <= 0 ? items.length - 1 : activeIndex - 1;
+            
+            // Add active class to new item
+            items[activeIndex].classList.add('active');
+            
+            // Ensure the active item is visible by scrolling if needed
+            items[activeIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } 
+        else if (e.key === 'Enter' && activeItem) {
+            e.preventDefault();
+            
+            const amount = activeItem.getAttribute('data-amount');
+            const name = activeItem.getAttribute('data-name');
+            
+            // Update amount input
+            this.expenseAmountInput.value = formatAmountInput(amount);
+            
+            // Update name input if empty
+            if (this.expenseNameInput.value.trim() === '') {
+                this.expenseNameInput.value = name;
+            }
+            
+            this.closeAllAutocomplete();
+            
+            // Focus the next input field for better UX
+            this.payerSelect.focus();
+        } 
+        else if (e.key === 'Escape') {
+            e.preventDefault();
+            this.closeAllAutocomplete();
+        }
+        else if (e.key === 'Tab') {
+            // Close autocomplete on tab key, but don't prevent default
+            this.closeAllAutocomplete();
+        }
+    }
+    
+    /**
+     * Handle keyboard navigation for the name autocomplete
+     */
+    handleNameInputKeypress(e) {
+        // Only process keyboard events when the dropdown is visible
+        const container = document.getElementById('expense-name-suggestions');
+        if (!container || container.classList.contains('hidden')) return;
+        
+        const items = container.querySelectorAll('.autocomplete-item');
+        if (items.length === 0) return;
+        
+        let activeItem = container.querySelector('.autocomplete-item.active');
+        let activeIndex = activeItem ? parseInt(activeItem.getAttribute('data-index')) : -1;
+        
+        // Xử lý các phím mũi tên và Enter
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            
+            // Remove active class from current item
+            if (activeItem) {
+                activeItem.classList.remove('active');
+            }
+            
+            // Calculate next index (with wrap-around)
+            activeIndex = (activeIndex + 1) % items.length;
+            
+            // Add active class to new item
+            items[activeIndex].classList.add('active');
+            
+            // Ensure the active item is visible by scrolling if needed
+            items[activeIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } 
+        else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            
+            // Remove active class from current item
+            if (activeItem) {
+                activeItem.classList.remove('active');
+            }
+            
+            // Calculate previous index (with wrap-around)
+            activeIndex = activeIndex <= 0 ? items.length - 1 : activeIndex - 1;
+            
+            // Add active class to new item
+            items[activeIndex].classList.add('active');
+            
+            // Ensure the active item is visible by scrolling if needed
+            items[activeIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } 
+        else if (e.key === 'Enter' && activeItem) {
+            e.preventDefault();
+            
+            // Get the suggestion text from the active item's name span
+            const nameSpan = activeItem.querySelector('.autocomplete-item-name');
+            
+            // Extract the text content (without any HTML formatting)
+            const suggestionText = nameSpan ? this.getTextContentFromElement(nameSpan) : activeItem.textContent.trim();
+            
+            // Update the input value and close the dropdown
+            this.expenseNameInput.value = suggestionText;
+            this.closeAllAutocomplete();
+            
+            // Focus the next input field for better UX
+            this.expenseAmountInput.focus();
+        } 
+        else if (e.key === 'Escape') {
+            e.preventDefault();
+            this.closeAllAutocomplete();
+        }
+        else if (e.key === 'Tab') {
+            // Close autocomplete on tab key, but don't prevent default
+            this.closeAllAutocomplete();
+        }
     }
     
     /**
@@ -1520,50 +1771,24 @@ export class ExpenseUIController extends UIController {
             amountContainer.innerHTML = '';
         }
     }
-
-    handleNameInputKeypress(e) {
-        // Lấy vị trí của dropdown suggestion
-        const suggestionList = this.expenseNameContainer.querySelector('.autocomplete-items');
-        if (!suggestionList) return;
+    
+    /**
+     * Helper method to extract text content from an element
+     * even if it contains HTML markup
+     */
+    getTextContentFromElement(element) {
+        // Create a text node only version of the element
+        const clone = element.cloneNode(true);
         
-        const items = suggestionList.querySelectorAll('.autocomplete-item');
-        if (items.length === 0) return;
+        // Process all child nodes
+        const walk = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
+        let text = '';
+        let node;
         
-        let activeItem = suggestionList.querySelector('.autocomplete-active');
-        
-        // Xử lý các phím mũi tên và Enter
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            if (activeItem) {
-                activeItem.classList.remove('autocomplete-active');
-                const nextItem = activeItem.nextElementSibling;
-                if (nextItem) {
-                    nextItem.classList.add('autocomplete-active');
-                } else {
-                    items[0].classList.add('autocomplete-active');
-                }
-            } else {
-                items[0].classList.add('autocomplete-active');
-            }
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            if (activeItem) {
-                activeItem.classList.remove('autocomplete-active');
-                const prevItem = activeItem.previousElementSibling;
-                if (prevItem) {
-                    prevItem.classList.add('autocomplete-active');
-                } else {
-                    items[items.length - 1].classList.add('autocomplete-active');
-                }
-            } else {
-                items[items.length - 1].classList.add('autocomplete-active');
-            }
-        } else if (e.key === 'Enter' && activeItem) {
-            e.preventDefault();
-            this.expenseNameInput.value = activeItem.textContent;
-            this.closeAllAutocomplete();
-        } else if (e.key === 'Escape') {
-            this.closeAllAutocomplete();
+        while (node = walk.nextNode()) {
+            text += node.nodeValue;
         }
+        
+        return text.trim();
     }
 } 

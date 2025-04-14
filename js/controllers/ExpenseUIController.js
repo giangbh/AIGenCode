@@ -106,6 +106,16 @@ export class ExpenseUIController extends UIController {
             
             checkboxes.forEach(checkbox => {
                 checkbox.checked = !allChecked;
+                
+                // Update parent item styling
+                const parentItem = checkbox.closest('.participant-item');
+                if (parentItem) {
+                    if (checkbox.checked) {
+                        parentItem.classList.add('checked');
+                    } else {
+                        parentItem.classList.remove('checked');
+                    }
+                }
             });
             
             this.updateToggleAllButtonState();
@@ -180,28 +190,67 @@ export class ExpenseUIController extends UIController {
         participantsList.innerHTML = '';
         
         members.forEach(member => {
-            const div = document.createElement('div');
-            div.className = 'flex items-center';
+            // Create participant item container
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'participant-item checked';
             
+            // Create hidden checkbox input
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.id = `participant-${member}`;
             checkbox.name = 'participants';
             checkbox.value = member;
             checkbox.checked = true; // Default to checked
-            checkbox.className = 'participant-checkbox w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2';
+            checkbox.className = 'participant-checkbox';
             
-            // Add event listener to handle the change event
-            checkbox.addEventListener('change', () => this.handleParticipantChange());
-            
+            // Create label with custom checkmark
             const label = document.createElement('label');
             label.htmlFor = `participant-${member}`;
-            label.className = 'ml-2 text-sm font-medium text-gray-700';
-            label.textContent = member;
+            label.className = 'participant-label';
             
-            div.appendChild(checkbox);
-            div.appendChild(label);
-            participantsList.appendChild(div);
+            // Create custom checkmark
+            const checkmark = document.createElement('span');
+            checkmark.className = 'checkmark';
+            
+            // Add member name to label
+            const memberName = document.createElement('span');
+            memberName.textContent = member;
+            
+            // Assemble elements
+            label.appendChild(checkmark);
+            label.appendChild(memberName);
+            itemDiv.appendChild(checkbox);
+            itemDiv.appendChild(label);
+            participantsList.appendChild(itemDiv);
+            
+            // Add event listener to checkbox
+            checkbox.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    itemDiv.classList.add('checked');
+                } else {
+                    itemDiv.classList.remove('checked');
+                }
+                this.handleParticipantChange();
+            });
+            
+            // Add click handler to the entire item
+            itemDiv.addEventListener('click', (e) => {
+                // Prevent triggering when clicking directly on the checkbox
+                if (e.target !== checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                    
+                    // Update item styling
+                    if (checkbox.checked) {
+                        itemDiv.classList.add('checked');
+                    } else {
+                        itemDiv.classList.remove('checked');
+                    }
+                    
+                    // Trigger the change event manually
+                    const changeEvent = new Event('change');
+                    checkbox.dispatchEvent(changeEvent);
+                }
+            });
         });
         
         // Check if toggle all button exists and setup
@@ -232,14 +281,23 @@ export class ExpenseUIController extends UIController {
             this.toggleAllParticipantsBtn.textContent = 'Bỏ chọn tất cả';
             this.toggleAllParticipantsBtn.classList.remove('select-all');
             this.toggleAllParticipantsBtn.classList.add('clear-all');
+            this.toggleAllParticipantsBtn.style.backgroundColor = '#fee2e2';
+            this.toggleAllParticipantsBtn.style.borderColor = '#fca5a5';
+            this.toggleAllParticipantsBtn.style.color = '#b91c1c';
         } else if (checkedCount === 0) {
             this.toggleAllParticipantsBtn.textContent = 'Chọn tất cả';
             this.toggleAllParticipantsBtn.classList.remove('clear-all');
             this.toggleAllParticipantsBtn.classList.add('select-all');
+            this.toggleAllParticipantsBtn.style.backgroundColor = '#dcfce7';
+            this.toggleAllParticipantsBtn.style.borderColor = '#86efac';
+            this.toggleAllParticipantsBtn.style.color = '#166534';
         } else {
             this.toggleAllParticipantsBtn.textContent = 'Bỏ chọn tất cả';
             this.toggleAllParticipantsBtn.classList.remove('select-all');
             this.toggleAllParticipantsBtn.classList.add('clear-all');
+            this.toggleAllParticipantsBtn.style.backgroundColor = '#fee2e2';
+            this.toggleAllParticipantsBtn.style.borderColor = '#fca5a5';
+            this.toggleAllParticipantsBtn.style.color = '#b91c1c';
         }
     }
     

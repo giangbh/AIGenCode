@@ -1,14 +1,15 @@
 /* Styles for expense suggestions */
 .suggestions-container {
-  margin-bottom: 20px;
-  padding: 10px;
-  background-color: #f5f5f5;
+  margin-bottom: 16px;
+  padding: 12px;
+  background-color: #f8fafc;
   border-radius: 8px;
+  border: 1px solid #e2e8f0;
 }
 
 .suggestions-container h4 {
   font-size: 14px;
-  color: #555;
+  color: #64748b;
   margin-top: 0;
   margin-bottom: 10px;
 }
@@ -22,32 +23,76 @@
 .suggestion-item {
   padding: 6px 12px;
   background-color: #fff;
-  border: 1px solid #ddd;
+  border: 1px solid #e2e8f0;
   border-radius: 20px;
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
   align-items: center;
   gap: 8px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
 .suggestion-item:hover {
-  background-color: #eef7ff;
-  border-color: #a0d0ff;
+  background-color: #f0f9ff;
+  border-color: #bae6fd;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
 .suggestion-item.selected {
-  background-color: #e2f0ff;
-  border-color: #4a9eff;
+  background-color: #e0f2fe;
+  border-color: #38bdf8;
   font-weight: 500;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Trạng thái khớp một phần */
+.suggestion-item.bg-blue-50 {
+  background-color: #f0f9ff;
+  border-color: #bae6fd;
 }
 
 .suggestion-name {
   font-size: 13px;
+  color: #334155;
 }
 
 .suggestion-amount {
   font-size: 13px;
-  color: #666;
+  color: #0369a1;
   font-weight: 500;
+}
+
+/* Autocomplete dropdown styles */
+.autocomplete-items {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 2px;
+}
+
+.autocomplete-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.active {
+  background-color: #f1f9ff;
+}
+
+.autocomplete-item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #334155;
+}
+
+.autocomplete-item-amount {
+  font-size: 13px;
+  color: #0284c7;
+  margin-left: 8px;
 } 

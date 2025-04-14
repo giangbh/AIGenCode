@@ -60,6 +60,30 @@ export class ExpenseUIController extends UIController {
             if (!this.splitEquallyToggle.checked) {
                 this.updateManualSplitTotal();
             }
+            // Hiển thị gợi ý autocomplete khi nhập số tiền
+            this.showAmountAutocomplete();
+        });
+        
+        // Thêm sự kiện focus cho trường nhập tên chi tiêu
+        this.expenseNameInput.addEventListener('focus', () => {
+            this.showNameAutocomplete();
+        });
+
+        // Thêm sự kiện input cho trường nhập tên chi tiêu
+        this.expenseNameInput.addEventListener('input', () => {
+            this.showNameAutocomplete();
+        });
+
+        // Thêm sự kiện focus cho trường nhập số tiền
+        this.expenseAmountInput.addEventListener('focus', () => {
+            this.showAmountAutocomplete();
+        });
+        
+        // Đóng dropdown khi nhấp vào bất kỳ đâu ngoài các dropdown
+        document.addEventListener('click', (e) => {
+            if (!e.target.matches('#expense-name, #expense-amount, .autocomplete-item')) {
+                this.closeAllAutocomplete();
+            }
         });
         
         this.splitEquallyToggle.addEventListener('change', () => { 
@@ -85,6 +109,23 @@ export class ExpenseUIController extends UIController {
         
         this.cancelEditBtn.addEventListener('click', () => this.resetForm());
         
+        // Setup copy expense modal buttons
+        const copyExpenseModal = document.getElementById('copy-expense-modal-backdrop');
+        const cancelCopyBtn = document.getElementById('cancel-copy-btn');
+        const confirmCopyBtn = document.getElementById('confirm-copy-btn');
+        
+        if (cancelCopyBtn) {
+            cancelCopyBtn.addEventListener('click', () => {
+                copyExpenseModal.classList.add('hidden');
+            });
+        }
+        
+        if (confirmCopyBtn) {
+            confirmCopyBtn.addEventListener('click', () => {
+                this.confirmCopyExpense();
+            });
+        }
+        
         if (this.quickDepositBtn) {
             this.quickDepositBtn.addEventListener('click', () => {
                 // Assign default member for quick deposit - can be adjusted as needed
@@ -92,6 +133,12 @@ export class ExpenseUIController extends UIController {
                 this.showQrCode('', defaultMember, 1000000);
             });
         }
+        
+        // Hiển thị gợi ý chi tiêu khi trang được khởi tạo
+        setTimeout(() => {
+            // Chỉ cần tải gợi ý, không hiển thị ngay
+            this.app.expenseManager.getExpenseSuggestions();
+        }, 500);
     }
     
     /**
@@ -291,6 +338,11 @@ export class ExpenseUIController extends UIController {
         
         this.noExpensesMessage.classList.add('hidden');
         
+        // Hiển thị gợi ý chi tiêu nếu không trong chế độ chỉnh sửa
+        if (!this.editingExpenseId) {
+            this.renderExpenseSuggestions();
+        }
+        
         // Add sorting controls
         const sortingControls = document.createElement('div');
         sortingControls.className = 'flex flex-wrap items-center justify-between mb-4 bg-gray-50 p-3 rounded-lg';
@@ -460,11 +512,23 @@ export class ExpenseUIController extends UIController {
             date.className = 'text-sm text-gray-500 mr-2';
             date.textContent = formatDisplayDate(expense.date);
             
+            // Add copy button to header
+            const copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.className = 'text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50 transition-colors mr-2';
+            copyBtn.innerHTML = '<i data-lucide="copy" class="w-4 h-4"></i>';
+            copyBtn.title = 'Sao chép chi tiêu';
+            copyBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent toggling collapse
+                this.handleCopyExpense(expense.id);
+            });
+            
             const collapseIcon = document.createElement('span');
             collapseIcon.className = 'collapse-icon';
             collapseIcon.innerHTML = '<i data-lucide="chevron-down" class="w-4 h-4"></i>';
             
             headerRight.appendChild(date);
+            headerRight.appendChild(copyBtn);
             headerRight.appendChild(collapseIcon);
             
             header.appendChild(headerLeft);
@@ -963,29 +1027,252 @@ export class ExpenseUIController extends UIController {
      * Reset the form to initial state
      */
     resetForm() {
-        // Reset expense form
         this.expenseForm.reset();
-        this.editingExpenseId = null;
+        this.expenseDateInput.value = getTodayDateString();
         this.editExpenseIdInput.value = '';
-        
+        this.editingExpenseId = null;
         this.formTitle.textContent = 'Thêm chi tiêu mới';
         this.saveBtnText.textContent = 'Lưu chi tiêu';
-        this.saveExpenseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600'); 
+        this.saveExpenseBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
         this.saveExpenseBtn.classList.add('bg-green-600', 'hover:bg-green-700');
-        this.saveExpenseBtn.disabled = false;
-        
         this.cancelEditBtn.classList.add('hidden');
-        this.expenseDateInput.value = getTodayDateString();
-        this.participantsListDiv.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
-        
         this.splitEquallyToggle.checked = true;
         this.manualSplitSection.classList.add('hidden');
-        this.manualSplitInputsDiv.innerHTML = ''; 
-        this.manualSplitError.classList.add('hidden');
-        this.splitEquallyToggle.dispatchEvent(new Event('change'));
-        this.handleParticipantChange();
-        this.expenseAmountInput.value = '';
+        
+        // Check all participants by default for new expense
+        const checkboxes = this.participantsListDiv.querySelectorAll('.participant-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = true;
+        });
+        
         this.updateToggleAllButtonState();
+        
+        // Đóng tất cả autocomplete dropdowns
+        this.closeAllAutocomplete();
+    }
+    
+    /**
+     * Hiển thị các gợi ý chi tiêu dựa trên lịch sử
+     */
+    renderExpenseSuggestions() {
+        const suggestionsContainer = document.getElementById('expense-suggestions');
+        const suggestionList = document.getElementById('suggestion-list');
+        
+        if (!suggestionsContainer || !suggestionList) return;
+        
+        // Lấy gợi ý từ ExpenseManager
+        const suggestions = this.app.expenseManager.getExpenseSuggestions();
+        
+        // Nếu không có gợi ý, ẩn container
+        if (!suggestions || suggestions.length === 0) {
+            suggestionsContainer.classList.add('hidden');
+            return;
+        }
+        
+        // Xóa tất cả gợi ý cũ
+        suggestionList.innerHTML = '';
+        
+        // Hiển thị các gợi ý mới
+        suggestions.forEach(suggestion => {
+            const suggestionItem = document.createElement('div');
+            suggestionItem.className = 'suggestion-item';
+            
+            // Thêm các thuộc tính data để dễ truy xuất giá trị
+            suggestionItem.dataset.name = suggestion.name;
+            suggestionItem.dataset.amount = suggestion.amount;
+            
+            const namePart = document.createElement('span');
+            namePart.className = 'suggestion-name';
+            namePart.textContent = suggestion.name;
+            
+            const amountPart = document.createElement('span');
+            amountPart.className = 'suggestion-amount';
+            amountPart.textContent = formatCurrency(suggestion.amount).replace('₫', 'VNĐ');
+            
+            suggestionItem.appendChild(namePart);
+            suggestionItem.appendChild(amountPart);
+            
+            // Xử lý khi người dùng nhấp vào gợi ý
+            suggestionItem.addEventListener('click', () => {
+                // Đánh dấu gợi ý được chọn
+                document.querySelectorAll('.suggestion-item').forEach(item => {
+                    item.classList.remove('selected');
+                });
+                suggestionItem.classList.add('selected');
+                
+                // Điền thông tin vào form
+                this.expenseNameInput.value = suggestion.name;
+                this.expenseAmountInput.value = formatAmountInput(suggestion.amount.toString());
+            });
+            
+            suggestionList.appendChild(suggestionItem);
+        });
+        
+        // Hiển thị container gợi ý
+        suggestionsContainer.classList.remove('hidden');
+        
+        // Làm nổi bật các gợi ý phù hợp với dữ liệu đang nhập
+        this.highlightMatchingSuggestions();
+        
+        // Khởi tạo lại biểu tượng Lucide
+        lucide.createIcons({
+            scope: suggestionsContainer
+        });
+    }
+    
+    /**
+     * Làm nổi bật các gợi ý phù hợp với dữ liệu đang nhập
+     */
+    highlightMatchingSuggestions() {
+        const currentName = this.expenseNameInput.value.trim().toLowerCase();
+        const currentAmount = parseFormattedAmount(this.expenseAmountInput.value);
+        
+        const suggestionItems = document.querySelectorAll('.suggestion-item');
+        
+        if (suggestionItems.length === 0) return;
+        
+        let exactMatch = false;
+        
+        suggestionItems.forEach(item => {
+            // Lấy tên và số tiền từ gợi ý
+            const suggestionName = item.querySelector('.suggestion-name').textContent.toLowerCase();
+            const suggestionAmountText = item.querySelector('.suggestion-amount').textContent;
+            const suggestionAmount = parseFormattedAmount(suggestionAmountText);
+            
+            // Kiểm tra trường hợp phù hợp
+            const nameMatches = suggestionName.includes(currentName) && currentName.length > 0;
+            const amountMatches = !isNaN(currentAmount) && currentAmount > 0 && currentAmount === suggestionAmount;
+            const exactNameMatch = suggestionName === currentName && currentName.length > 0;
+            
+            // Áp dụng trạng thái hiển thị
+            if ((nameMatches && amountMatches) || (exactNameMatch && amountMatches)) {
+                // Nếu cả tên và số tiền đều khớp, đánh dấu là khớp chính xác
+                item.classList.add('selected');
+                exactMatch = true;
+            } else if (nameMatches || amountMatches) {
+                // Nếu chỉ tên hoặc số tiền khớp, đánh dấu là tương đối khớp
+                item.classList.add('bg-blue-50');
+                item.classList.remove('selected');
+            } else {
+                // Nếu không khớp, bỏ tất cả đánh dấu
+                item.classList.remove('selected', 'bg-blue-50');
+            }
+            
+            // Auto-complete khi có khớp chính xác về tên
+            if (exactNameMatch && !amountMatches && this.expenseAmountInput.value === '') {
+                // Tự động điền số tiền nếu tên khớp chính xác và trường số tiền đang trống
+                this.expenseAmountInput.value = formatAmountInput(
+                    suggestionAmount.toString()
+                );
+            }
+        });
+        
+        // Hiển thị gợi ý nếu có nhập liệu từ người dùng
+        const suggestionContainer = document.getElementById('expense-suggestions');
+        if (suggestionContainer && (currentName.length > 0 || (currentAmount && currentAmount > 0))) {
+            suggestionContainer.classList.remove('hidden');
+        }
+    }
+    
+    /**
+     * Handle copying an expense
+     * @param {string} expenseId - The ID of the expense to copy
+     */
+    handleCopyExpense(expenseId) {
+        const expense = this.app.expenseManager.getExpenseById(expenseId);
+        if (!expense) return;
+        
+        // Set expense data in the copy modal
+        const copyExpenseModal = document.getElementById('copy-expense-modal-backdrop');
+        const copyExpenseName = document.getElementById('copy-expense-name');
+        const copyExpenseAmount = document.getElementById('copy-expense-amount');
+        const copyExpenseDetails = document.getElementById('copy-expense-details');
+        
+        copyExpenseName.textContent = expense.name;
+        copyExpenseAmount.textContent = formatCurrency(expense.amount);
+        copyExpenseDetails.textContent = `Người trả: ${expense.payer === this.app.expenseManager.GROUP_FUND_PAYER_ID ? 'Quỹ nhóm' : expense.payer}, Ngày: ${formatDisplayDate(expense.date)}`;
+        
+        // Store the expense ID to use when confirming
+        copyExpenseModal.dataset.expenseId = expenseId;
+        
+        // Show the modal
+        copyExpenseModal.classList.remove('hidden');
+        
+        // Initialize icons in the modal
+        lucide.createIcons({
+            scope: copyExpenseModal
+        });
+    }
+    
+    /**
+     * Confirm copying an expense
+     */
+    confirmCopyExpense() {
+        const copyExpenseModal = document.getElementById('copy-expense-modal-backdrop');
+        const expenseId = copyExpenseModal.dataset.expenseId;
+        const useTodayDate = document.getElementById('use-today-date').checked;
+        
+        // Get the original expense
+        const expense = this.app.expenseManager.getExpenseById(expenseId);
+        if (!expense) return;
+        
+        // Fill form with expense data
+        this.expenseNameInput.value = expense.name;
+        this.expenseAmountInput.value = formatAmountInput(expense.amount.toString());
+        
+        // Set date - either today or the original date
+        if (useTodayDate) {
+            this.expenseDateInput.value = getTodayDateString();
+        } else {
+            this.expenseDateInput.value = expense.date;
+        }
+        
+        // Set payer
+        this.payerSelect.value = expense.payer;
+        
+        // Set participants
+        const participantCheckboxes = this.participantsListDiv.querySelectorAll('.participant-checkbox');
+        participantCheckboxes.forEach(checkbox => {
+            checkbox.checked = expense.participants.includes(checkbox.value);
+        });
+        
+        // Update toggle all button state
+        this.updateToggleAllButtonState();
+        
+        // Copy split equally setting from original expense
+        const hasManualSplits = expense.splits && Object.keys(expense.splits).length > 0;
+        this.splitEquallyToggle.checked = !hasManualSplits;
+        
+        // Handle split settings
+        if (hasManualSplits) {
+            // If expense has manual splits, turn off split equally toggle
+            this.manualSplitSection.classList.remove('hidden');
+            this.renderManualSplitInputs();
+            
+            // Set the manual split values after a short delay to ensure inputs are created
+            setTimeout(() => {
+                const splitInputs = this.manualSplitInputsDiv.querySelectorAll('.split-amount-input');
+                splitInputs.forEach(input => {
+                    const participant = input.id.replace('split-amount-', '');
+                    if (expense.splits[participant]) {
+                        input.value = formatAmountInput(expense.splits[participant].toString());
+                    }
+                });
+                this.updateManualSplitTotal();
+            }, 100);
+        } else {
+            // If expense uses equal split, hide manual split section
+            this.manualSplitSection.classList.add('hidden');
+        }
+        
+        // Hide the modal
+        copyExpenseModal.classList.add('hidden');
+        
+        // Scroll to form
+        this.expenseForm.scrollIntoView({ behavior: 'smooth' });
+        
+        // Show success message
+        showMessage('Đã sao chép thông tin chi tiêu', 'success');
     }
     
     /**
@@ -1079,5 +1366,204 @@ export class ExpenseUIController extends UIController {
                 class: 'w-3 h-3'
             }
         });
+    }
+
+    /**
+     * Hiển thị gợi ý tên chi tiêu
+     * @param {Array} suggestions - Mảng các gợi ý
+     * @param {HTMLElement} inputElement - Input element
+     */
+    showNameAutocomplete(suggestions = [], inputElement = this.expenseNameInput) {
+        this.closeAllAutocomplete();
+        
+        const container = document.getElementById('expense-name-suggestions');
+        if (!container || !inputElement) return;
+        
+        // Ensure container is in the same parent div as the input for proper positioning
+        const inputParent = inputElement.closest('.relative');
+        if (inputParent && !inputParent.contains(container)) {
+            inputParent.appendChild(container);
+        }
+        
+        container.innerHTML = '';
+        container.classList.remove('hidden');
+        
+        // Simple absolute positioning within the parent container
+        container.style.position = 'absolute';
+        container.style.top = `${inputElement.offsetHeight}px`;
+        container.style.left = '0';
+        container.style.width = '100%';
+        container.style.zIndex = '100';
+        
+        // If no suggestions were provided, try to get them from the expense manager
+        if (!suggestions || suggestions.length === 0) {
+            const currentValue = this.expenseNameInput.value.trim().toLowerCase();
+            const allSuggestions = this.app.expenseManager.getExpenseSuggestions();
+            
+            // Filter suggestions based on the current input value
+            suggestions = allSuggestions
+                .map(s => s.name)
+                .filter(name => currentValue === '' || name.toLowerCase().includes(currentValue))
+                .slice(0, 5); // Limit to 5 suggestions
+        }
+        
+        if (suggestions.length === 0) {
+            container.classList.add('hidden');
+            return;
+        }
+        
+        suggestions.forEach(suggestion => {
+            const div = document.createElement('div');
+            div.innerHTML = suggestion;
+            div.classList.add('suggestion-item');
+            
+            div.addEventListener('click', () => {
+                inputElement.value = suggestion;
+                container.classList.add('hidden');
+                
+                // Trigger custom event để cập nhật giao diện
+                const event = new Event('input', { bubbles: true });
+                inputElement.dispatchEvent(event);
+            });
+            
+            container.appendChild(div);
+        });
+    }
+    
+    /**
+     * Hiển thị gợi ý số tiền dưới dạng dropdown
+     */
+    showAmountAutocomplete() {
+        const input = this.expenseAmountInput;
+        const currentValue = parseFormattedAmount(input.value);
+        const suggestions = this.app.expenseManager.getExpenseSuggestions();
+        const container = document.getElementById('expense-amount-suggestions');
+        
+        if (!container) return;
+        
+        // Ensure container is in the same parent div as the input for proper positioning
+        const inputParent = input.closest('.relative');
+        if (inputParent && !inputParent.contains(container)) {
+            inputParent.appendChild(container);
+        }
+        
+        // Xóa các gợi ý cũ
+        container.innerHTML = '';
+        
+        // Simple absolute positioning within the parent container
+        container.style.position = 'absolute';
+        container.style.top = `${input.offsetHeight}px`;
+        container.style.left = '0';
+        container.style.width = '100%';
+        container.style.zIndex = '100';
+        
+        // Lọc gợi ý phù hợp với giá trị đang nhập
+        const matchingSuggestions = suggestions.filter(suggestion => {
+            // Nếu đang nhập số tiền và khớp với gợi ý
+            return currentValue > 0 && 
+                  suggestion.amount.toString().includes(currentValue.toString());
+        });
+        
+        // Nếu đang sửa chi tiêu hoặc không có gợi ý, ẩn dropdown
+        if (this.editingExpenseId || matchingSuggestions.length === 0 || !currentValue) {
+            container.classList.add('hidden');
+            return;
+        }
+        
+        // Hiển thị các gợi ý
+        matchingSuggestions.forEach(suggestion => {
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            
+            const amountSpan = document.createElement('span');
+            amountSpan.className = 'autocomplete-item-name';
+            amountSpan.textContent = formatCurrency(suggestion.amount);
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'autocomplete-item-amount';
+            nameSpan.textContent = suggestion.name;
+            
+            item.appendChild(amountSpan);
+            item.appendChild(nameSpan);
+            
+            // Xử lý sự kiện khi nhấp vào gợi ý
+            item.addEventListener('click', () => {
+                input.value = formatAmountInput(suggestion.amount.toString());
+                // Nếu tên chi tiêu còn trống, tự động điền
+                if (this.expenseNameInput.value.trim() === '') {
+                    this.expenseNameInput.value = suggestion.name;
+                }
+                this.closeAllAutocomplete();
+            });
+            
+            container.appendChild(item);
+        });
+        
+        // Hiển thị dropdown
+        container.classList.remove('hidden');
+    }
+    
+    /**
+     * Đóng tất cả các dropdown autocomplete
+     */
+    closeAllAutocomplete() {
+        const nameContainer = document.getElementById('expense-name-suggestions');
+        const amountContainer = document.getElementById('expense-amount-suggestions');
+        
+        if (nameContainer) {
+            nameContainer.classList.add('hidden');
+            nameContainer.innerHTML = '';
+        }
+        
+        if (amountContainer) {
+            amountContainer.classList.add('hidden');
+            amountContainer.innerHTML = '';
+        }
+    }
+
+    handleNameInputKeypress(e) {
+        // Lấy vị trí của dropdown suggestion
+        const suggestionList = this.expenseNameContainer.querySelector('.autocomplete-items');
+        if (!suggestionList) return;
+        
+        const items = suggestionList.querySelectorAll('.autocomplete-item');
+        if (items.length === 0) return;
+        
+        let activeItem = suggestionList.querySelector('.autocomplete-active');
+        
+        // Xử lý các phím mũi tên và Enter
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (activeItem) {
+                activeItem.classList.remove('autocomplete-active');
+                const nextItem = activeItem.nextElementSibling;
+                if (nextItem) {
+                    nextItem.classList.add('autocomplete-active');
+                } else {
+                    items[0].classList.add('autocomplete-active');
+                }
+            } else {
+                items[0].classList.add('autocomplete-active');
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (activeItem) {
+                activeItem.classList.remove('autocomplete-active');
+                const prevItem = activeItem.previousElementSibling;
+                if (prevItem) {
+                    prevItem.classList.add('autocomplete-active');
+                } else {
+                    items[items.length - 1].classList.add('autocomplete-active');
+                }
+            } else {
+                items[items.length - 1].classList.add('autocomplete-active');
+            }
+        } else if (e.key === 'Enter' && activeItem) {
+            e.preventDefault();
+            this.expenseNameInput.value = activeItem.textContent;
+            this.closeAllAutocomplete();
+        } else if (e.key === 'Escape') {
+            this.closeAllAutocomplete();
+        }
     }
 } 

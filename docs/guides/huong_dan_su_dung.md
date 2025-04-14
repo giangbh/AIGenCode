@@ -56,6 +56,15 @@ CafeThu6 là ứng dụng quản lý chi tiêu nhóm, giúp các thành viên d�
 3. Nhấn nút "Cập nhật chi tiêu" để lưu thay đổi
 4. Hoặc nhấn "Hủy sửa" để hủy thao tác
 
+### Sao chép chi tiêu
+
+1. Trong danh sách chi tiêu, nhấn vào nút "Sao chép" (biểu tượng copy) trên chi tiêu muốn sao chép
+2. Một cửa sổ xác nhận sẽ hiển thị với thông tin chi tiêu sẽ được sao chép
+3. Bạn có thể chọn sử dụng ngày hôm nay hoặc giữ ngày của chi tiêu gốc
+4. Nhấn "Sao chép" để xác nhận và điền thông tin vào form
+5. Kiểm tra lại thông tin và thực hiện điều chỉnh nếu cần
+6. Nhấn "Lưu chi tiêu" để tạo một chi tiêu mới từ thông tin đã sao chép
+
 ### Xóa chi tiêu
 
 *Lưu ý: Chỉ người dùng có vai trò Admin mới có thể xóa chi tiêu*

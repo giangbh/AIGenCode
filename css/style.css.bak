@@ -1,0 +1,53 @@
+/* Styles for expense suggestions */
+.suggestions-container {
+  margin-bottom: 20px;
+  padding: 10px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+}
+
+.suggestions-container h4 {
+  font-size: 14px;
+  color: #555;
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.suggestion-item {
+  padding: 6px 12px;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.suggestion-item:hover {
+  background-color: #eef7ff;
+  border-color: #a0d0ff;
+}
+
+.suggestion-item.selected {
+  background-color: #e2f0ff;
+  border-color: #4a9eff;
+  font-weight: 500;
+}
+
+.suggestion-name {
+  font-size: 13px;
+}
+
+.suggestion-amount {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+} 

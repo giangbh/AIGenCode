@@ -120,7 +120,8 @@ export async function getExpenses() {
         payer: expense.payer,
         participants: expense.participants,
         equalSplit: expense.equal_split,
-        splits: expense.splits || {}
+        splits: expense.splits || {},
+        created_at: expense.created_at
     }));
 }
 
@@ -132,12 +133,13 @@ export async function getExpenses() {
  * @param {boolean} descending - Có sắp xếp theo thứ tự giảm dần không
  * @returns {Promise<Object>} Kết quả phân trang
  */
-export async function getPaginatedExpenses(page = 1, perPage = 5, sortBy = 'date', descending = true) {
+export async function getPaginatedExpenses(page = 1, perPage = 5, sortBy = 'created_at', descending = true) {
     // Xác định trường sắp xếp
     let orderField = 'created_at';
     if (sortBy === 'date') orderField = 'date';
     else if (sortBy === 'amount') orderField = 'amount';
     else if (sortBy === 'name') orderField = 'name';
+    else if (sortBy === 'created_at') orderField = 'created_at';
     
     // Tính toán từng mục bắt đầu và kết thúc
     const startIndex = (page - 1) * perPage;
@@ -175,7 +177,8 @@ export async function getPaginatedExpenses(page = 1, perPage = 5, sortBy = 'date
         payer: expense.payer,
         participants: expense.participants,
         equalSplit: expense.equal_split,
-        splits: expense.splits || {}
+        splits: expense.splits || {},
+        created_at: expense.created_at
     }));
     
     // Tính toán chi tiết phân trang
@@ -229,7 +232,8 @@ export async function addExpense(expense) {
         payer: data[0].payer,
         participants: data[0].participants,
         equalSplit: data[0].equal_split,
-        splits: data[0].splits || {}
+        splits: data[0].splits || {},
+        created_at: data[0].created_at
     };
 }
 
@@ -268,7 +272,8 @@ export async function updateExpense(id, expense) {
         payer: data[0].payer,
         participants: data[0].participants,
         equalSplit: data[0].equal_split,
-        splits: data[0].splits || {}
+        splits: data[0].splits || {},
+        created_at: data[0].created_at
     };
 }
 

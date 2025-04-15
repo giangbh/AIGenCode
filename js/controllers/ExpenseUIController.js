@@ -4,7 +4,7 @@
  */
 
 import { UIController } from './UIController.js';
-import { formatCurrency, formatDisplayDate, formatAmountInput, parseFormattedAmount, getTodayDateString, showMessage } from '../utils/helpers.js';
+import { formatCurrency, formatDisplayDate, formatAmountInput, parseFormattedAmount, getTodayDateString, showMessage, formatTimestamp } from '../utils/helpers.js';
 import { isAdmin } from '../utils/auth.js';
 
 export class ExpenseUIController extends UIController {
@@ -39,7 +39,7 @@ export class ExpenseUIController extends UIController {
         // State
         this.editingExpenseId = null;
         this.currentPage = 1;
-        this.sortField = 'date';
+        this.sortField = 'created_at';
         this.sortDirection = true; // descending
         
         // Initialize UI
@@ -427,6 +427,7 @@ export class ExpenseUIController extends UIController {
         sortButtonsContainer.className = 'flex flex-wrap gap-2';
         
         const sortOptions = [
+            { value: 'created_at', label: 'Mới nhất' },
             { value: 'date', label: 'Ngày' },
             { value: 'amount', label: 'Số tiền' },
             { value: 'name', label: 'Tên chi tiêu' }
@@ -529,9 +530,15 @@ export class ExpenseUIController extends UIController {
             const headerRight = document.createElement('div');
             headerRight.className = 'flex items-center';
             
-            const date = document.createElement('span');
-            date.className = 'text-sm text-gray-500 mr-2';
-            date.textContent = formatDisplayDate(expense.date);
+            // Tạo phần tử hiển thị thời gian tạo
+            const timestamp = document.createElement('span');
+            timestamp.className = 'text-sm text-gray-500 mr-2';
+            if (expense.created_at) {
+                timestamp.innerHTML = `<i data-lucide="clock" class="w-3 h-3 mr-1 inline"></i>${formatTimestamp(expense.created_at)}`;
+            } else {
+                // Fallback nếu không có created_at
+                timestamp.textContent = formatDisplayDate(expense.date);
+            }
             
             // Add copy button to header
             const copyBtn = document.createElement('button');
@@ -548,7 +555,7 @@ export class ExpenseUIController extends UIController {
             collapseIcon.className = 'collapse-icon';
             collapseIcon.innerHTML = '<i data-lucide="chevron-down" class="w-4 h-4"></i>';
             
-            headerRight.appendChild(date);
+            headerRight.appendChild(timestamp);
             headerRight.appendChild(copyBtn);
             headerRight.appendChild(collapseIcon);
             
@@ -581,8 +588,24 @@ export class ExpenseUIController extends UIController {
             participants.className = 'text-sm text-gray-700';
             participants.textContent = `Người tham gia: ${expense.participants.join(', ')}`;
             
+            // Thêm thông tin ngày chi tiêu
+            const expenseDate = document.createElement('p');
+            expenseDate.className = 'text-sm text-gray-700 mt-1';
+            expenseDate.innerHTML = `Ngày chi tiêu: <span class="font-medium">${formatDisplayDate(expense.date)}</span>`;
+            
+            // Thêm thông tin thời gian tạo chi tiêu
+            const createdTime = document.createElement('p');
+            createdTime.className = 'text-sm text-gray-700';
+            if (expense.created_at) {
+                createdTime.innerHTML = `Thời gian ghi nhận: <span class="font-mono text-gray-600">${formatTimestamp(expense.created_at)}</span>`;
+            }
+            
             details.appendChild(payer);
             details.appendChild(participants);
+            details.appendChild(expenseDate);
+            if (expense.created_at) {
+                details.appendChild(createdTime);
+            }
             
             // Add actions
             const actions = document.createElement('div');
@@ -1199,7 +1222,10 @@ export class ExpenseUIController extends UIController {
         
         copyExpenseName.textContent = expense.name;
         copyExpenseAmount.textContent = formatCurrency(expense.amount);
-        copyExpenseDetails.textContent = `Người trả: ${expense.payer === this.app.expenseManager.GROUP_FUND_PAYER_ID ? 'Quỹ nhóm' : expense.payer}, Ngày: ${formatDisplayDate(expense.date)}`;
+        
+        // Hiển thị thông tin chi tiết với ngày chi tiêu
+        const payerName = expense.payer === this.app.expenseManager.GROUP_FUND_PAYER_ID ? 'Quỹ nhóm' : expense.payer;
+        copyExpenseDetails.textContent = `Người trả: ${payerName}, Ngày: ${formatDisplayDate(expense.date)}`;
         
         // Store the expense ID to use when confirming
         copyExpenseModal.dataset.expenseId = expenseId;

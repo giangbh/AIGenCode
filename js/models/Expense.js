@@ -17,6 +17,7 @@ export class Expense {
      * @param {boolean} data.equalSplit - Whether the expense is split equally
      * @param {Object} data.splits - Manual split amounts per person (if !equalSplit)
      * @param {string} data.id - Optional ID (generated if not provided)
+     * @param {string} data.created_at - Optional creation date (YYYY-MM-DD HH:MM:SS)
      */
     constructor(data) {
         this.id = data.id || generateId();
@@ -27,6 +28,7 @@ export class Expense {
         this.participants = data.participants;
         this.equalSplit = data.equalSplit;
         this.splits = data.equalSplit ? {} : data.splits;
+        this.created_at = data.created_at || null;
     }
     
     /**
@@ -78,7 +80,8 @@ export class Expense {
             payer: this.payer,
             participants: this.participants,
             equalSplit: this.equalSplit,
-            splits: this.splits
+            splits: this.splits,
+            created_at: this.created_at
         };
     }
     

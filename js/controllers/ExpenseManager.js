@@ -397,10 +397,14 @@ export class ExpenseManager {
      * @param {boolean} descending - Whether to sort in descending order
      * @returns {Object} Pagination result object
      */
-    getPaginatedExpenses(page = 1, perPage = 5, sortBy = 'date', descending = true) {
+    getPaginatedExpenses(page = 1, perPage = 5, sortBy = 'created_at', descending = true) {
         // Sort expenses
         const sortedExpenses = [...this.expenses].sort((a, b) => {
-            if (sortBy === 'date') {
+            if (sortBy === 'created_at') {
+                const dateA = new Date(a.created_at || a.date);
+                const dateB = new Date(b.created_at || b.date);
+                return descending ? dateB - dateA : dateA - dateB;
+            } else if (sortBy === 'date') {
                 const dateA = new Date(a.date);
                 const dateB = new Date(b.date);
                 return descending ? dateB - dateA : dateA - dateB;
@@ -445,7 +449,7 @@ export class ExpenseManager {
      * @param {boolean} descending - Whether to sort in descending order
      * @returns {Promise<Object>} Pagination result object with expenses
      */
-    async getPaginatedExpensesFromServer(page = 1, perPage = 5, sortBy = 'date', descending = true) {
+    async getPaginatedExpensesFromServer(page = 1, perPage = 5, sortBy = 'created_at', descending = true) {
         try {
             const result = await supabase.getPaginatedExpenses(page, perPage, sortBy, descending);
             

@@ -2092,86 +2092,53 @@ export class ExpenseUIController extends UIController {
         
         // Create timestamp display
         const timestampHtml = expense.created_at 
-            ? `<div class="text-xs text-gray-500 mt-1">${formatTimestamp(expense.created_at)}</div>` 
+            ? `<div class="text-xs text-gray-500 mt-1">${formatTimestamp(expense.created_at)}</div>`
             : '';
-        
-        // Parse location if it's a string
-        let location = expense.location;
-        if (location && typeof location === 'string') {
-            try {
-                location = JSON.parse(location);
-                console.log('Successfully parsed location from string:', location);
-            } catch (e) {
-                console.error('Failed to parse location string:', e);
-                location = null;
-            }
-        }
-        
-        // SPECIAL CASE: Handle location inside nested key-value structure
-        // This handles special case where API might return location data inside a nested structure
-        if (location && typeof location === 'object') {
-            // Case 1: Handle the case where location field might contain a location property
-            if (location.location && typeof location.location === 'object') {
-                console.log('Found nested location.location structure, using that instead');
-                location = location.location;
-            }
-            
-            // Case 2: Handle the case where API directly returns lat/lng at top level with location.name
-            if (!('lat' in location) && !('lng' in location) && location.name) {
-                const nameValue = location.name;
-                if (typeof nameValue === 'object' && 'lat' in nameValue && 'lng' in nameValue) {
-                    console.log('Found lat/lng inside name property, restructuring');
-                    location = nameValue;
-                }
-            }
-            
-            // Debug location structure 
-            console.log('Final location structure:', {
-                hasLat: 'lat' in location,
-                hasLng: 'lng' in location,
-                hasName: 'name' in location,
-                lat: location.lat,
-                lng: location.lng,
-                name: location.name
-            });
-        }
-        
-        // FIX: Check location structure and normalize it if needed
-        // Handle case where location may have nested structure or incorrect format
-        if (location && typeof location === 'object') {            
-            // Debug location object structure
-            console.log('Location structure check:', {
-                hasLat: 'lat' in location,
-                hasLng: 'lng' in location,
-                lat: location.lat,
-                lng: location.lng,
-                name: location.name
-            });
-        }
-            
-        // Start with raw location display regardless of format
-        let rawLocationDisplay = '';
+
+        // --- Simplified Location Handling ---
+        let location = null;
+        let rawLocationDisplay = ''; // For debugging
+
         if (expense.location) {
-            const locationStr = typeof expense.location === 'string' 
-                ? expense.location 
+            // Store raw data for debugging display
+            const rawLocationStr = typeof expense.location === 'string'
+                ? expense.location
                 : JSON.stringify(expense.location);
-            
             rawLocationDisplay = `
-                <div class="mt-2 text-sm bg-blue-50 p-2 rounded">
-                    <p class="font-medium text-blue-800">Vị trí (dữ liệu gốc):</p>
-                    <p class="text-xs text-blue-600 break-words">${locationStr}</p>
+                <div class="mt-2 text-sm bg-gray-100 p-2 rounded border border-gray-200">
+                    <p class="font-medium text-gray-600 text-xs">Dữ liệu vị trí gốc:</p>
+                    <p class="text-xs text-gray-500 break-words">${rawLocationStr}</p>
                 </div>
             `;
+
+            // Attempt to parse if it's a string
+            if (typeof expense.location === 'string') {
+                try {
+                    location = JSON.parse(expense.location);
+                    console.log(`DEBUG [${expense.id}]: Successfully parsed location from string:`, location);
+                } catch (e) {
+                    console.error(`DEBUG [${expense.id}]: Failed to parse location string:`, e, 'Raw string:', expense.location);
+                    location = null; // Parsing failed
+                }
+            } else if (typeof expense.location === 'object') {
+                location = expense.location; // Assume it's already an object
+                console.log(`DEBUG [${expense.id}]: Location is already an object:`, location);
+            }
+        } else {
+             console.log(`DEBUG [${expense.id}]: No location data found (expense.location is falsy).`);
         }
-            
-        // Check if expense has location data - improved check
-        const hasLocation = location && 
-                         'lat' in location && 
-                         'lng' in location && 
-                         location.lat !== null && 
-                         location.lng !== null;
-        
-        console.log('Has location?', hasLocation);
+
+        // Final check for valid location object structure before determining 'hasLocation'
+        console.log(`DEBUG [${expense.id}]: Evaluating location object for hasLocation check:`, location);
+        const hasLocation = location &&
+                         typeof location === 'object' && // Ensure it's an object
+                         'lat' in location &&
+                         'lng' in location &&
+                         location.lat !== null && location.lat !== undefined &&
+                         location.lng !== null && location.lng !== undefined;
+
+        console.log(`DEBUG [${expense.id}]: Final 'hasLocation' result:`, hasLocation);
+        // --- End Simplified Location Handling ---
         
         // Add location badge to expense header if location exists
         const locationBadge = hasLocation 
@@ -2465,4 +2432,4 @@ export class ExpenseUIController extends UIController {
             this.marker = null;
         }
     }
-} 
+}

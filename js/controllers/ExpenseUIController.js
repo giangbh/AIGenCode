@@ -281,28 +281,44 @@ export class ExpenseUIController extends UIController {
     
     /**
      * Render manual split inputs
+     * @param {Object} existingSplits - Existing splits for editing
      */
-    renderManualSplitInputs() {
-        const selectedParticipants = this.getSelectedParticipants();
+    renderManualSplitInputs(existingSplits = {}) {
         this.manualSplitInputsDiv.innerHTML = '';
+        
+        const selectedParticipants = this.getSelectedParticipants();
+        
+        if (selectedParticipants.length === 0) {
+            this.manualSplitInputsDiv.innerHTML = '<p class="text-sm text-gray-500">Vui lòng chọn ít nhất một người tham gia</p>';
+            return;
+        }
+        
+        // Get expense amount to calculate default equal split
+        const totalAmount = parseFormattedAmount(this.expenseAmountInput.value) || 0;
+        const defaultAmount = totalAmount > 0 ? Math.round(totalAmount / selectedParticipants.length) : 0;
         
         selectedParticipants.forEach(participant => {
             const div = document.createElement('div');
             div.className = 'flex items-center justify-between';
             
             const label = document.createElement('label');
-            label.htmlFor = `split-amount-${participant}`;
-            label.className = 'text-sm font-medium text-gray-700';
+            label.className = 'block text-sm font-medium text-gray-700 flex-grow';
             label.textContent = participant;
             
             const input = document.createElement('input');
             input.type = 'text';
             input.id = `split-amount-${participant}`;
-            input.name = `split-amount-${participant}`;
-            input.className = 'split-amount-input w-32 px-2 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500';
+            input.className = 'manual-split-input w-32 px-3 py-1 border border-gray-300 rounded-md text-right';
             input.placeholder = '0';
-            input.inputMode = 'numeric';
-            input.addEventListener('input', (e) => {
+            
+            // Nếu có split dữ liệu có sẵn thì dùng, không thì chia đều
+            if (existingSplits && existingSplits[participant] !== undefined) {
+                input.value = formatAmountInput(existingSplits[participant]);
+            } else {
+                input.value = formatAmountInput(defaultAmount.toString());
+            }
+            
+            input.addEventListener('input', (e) => { 
                 e.target.value = formatAmountInput(e.target.value);
                 this.updateManualSplitTotal();
             });
@@ -866,102 +882,120 @@ export class ExpenseUIController extends UIController {
     
     /**
      * Handle form submission
-     * @param {Event} event - The form submission event
+     * @param {Event} event - The submit event
      */
     async handleFormSubmit(event) {
         event.preventDefault();
         
+        // Get form values
         const name = this.expenseNameInput.value.trim();
         const amount = parseFormattedAmount(this.expenseAmountInput.value);
         const date = this.expenseDateInput.value;
         const payer = this.payerSelect.value;
         const participants = this.getSelectedParticipants();
+        const equalSplit = this.splitEquallyToggle.checked;
+        
+        // Get location data if enabled
+        let location = null;
+        if (this.saveLocationToggle && this.saveLocationToggle.checked) {
+            const lat = parseFloat(this.locationLat.value);
+            const lng = parseFloat(this.locationLng.value);
+            const locationName = this.locationName.value.trim();
+            
+            if (lat && lng) {
+                location = {
+                    lat: lat,
+                    lng: lng,
+                    name: locationName
+                };
+                // Debug thông tin location
+                console.log('Location data being saved:', location);
+            }
+        }
+        
+        // Validate form
+        if (!name) {
+            showMessage('Vui lòng nhập tên chi tiêu', 'error');
+            return;
+        }
+        
+        if (amount <= 0) {
+            showMessage('Vui lòng nhập số tiền hợp lệ', 'error');
+            return;
+        }
+        
+        if (!payer) {
+            showMessage('Vui lòng chọn người trả tiền', 'error');
+            return;
+        }
         
         if (participants.length === 0) {
             showMessage('Vui lòng chọn ít nhất một người tham gia', 'error');
             return;
         }
         
-        const equalSplit = this.splitEquallyToggle.checked;
         let splits = {};
-        
         if (!equalSplit) {
             splits = this.getManualSplits();
             
-            // Validate that manual splits sum to the expense amount
             const totalSplit = Object.values(splits).reduce((sum, val) => sum + val, 0);
-            if (Math.abs(totalSplit - amount) > 0.01) {
-                showMessage('Tổng số tiền phân chia không khớp với tổng chi tiêu', 'error');
+            if (Math.abs(totalSplit - amount) > 1) { // Allow for 1 VND rounding error
+                showMessage('Tổng số tiền chia phải bằng tổng chi tiêu', 'error');
                 return;
             }
         }
         
+        // Disable button to prevent double submission
+        this.saveExpenseBtn.disabled = true;
+        this.saveBtnText.textContent = this.editingExpenseId ? 'Đang cập nhật...' : 'Đang lưu...';
+        
         try {
-            // Hiển thị trạng thái đang xử lý
-            this.saveExpenseBtn.disabled = true;
-            this.saveBtnText.textContent = this.editingExpenseId ? 'Đang cập nhật...' : 'Đang lưu...';
+            const expenseData = {
+                name,
+                amount,
+                date,
+                payer,
+                participants,
+                equalSplit,
+                splits,
+                location
+            };
+            
+            console.log('Saving expense with data:', expenseData);
             
             if (this.editingExpenseId) {
-                // Edit existing expense
-                await this.app.expenseManager.updateExpense(this.editingExpenseId, {
-                    name,
-                    amount,
-                    date,
-                    payer,
-                    participants,
-                    equalSplit,
-                    splits: equalSplit ? {} : splits,
-                });
+                // Update existing expense
+                await this.app.expenseManager.updateExpense(this.editingExpenseId, expenseData);
+                showMessage('Chi tiêu đã được cập nhật thành công');
                 
-                showMessage('Chi tiêu đã được cập nhật');
+                // Reset edit state
+                this.editingExpenseId = null;
+                this.formTitle.textContent = 'Thêm chi tiêu mới';
+                this.saveBtnText.textContent = 'Lưu chi tiêu';
+                this.cancelEditBtn.classList.add('hidden');
             } else {
-                // Create new expense
-                await this.app.expenseManager.addExpense({
-                    name,
-                    amount,
-                    date,
-                    payer,
-                    participants,
-                    equalSplit,
-                    splits: equalSplit ? {} : splits,
-                });
-                
-                showMessage('Chi tiêu mới đã được thêm');
+                // Add new expense
+                await this.app.expenseManager.addExpense(expenseData);
+                showMessage('Chi tiêu đã được thêm thành công');
             }
             
-            // Reset to first page after adding/editing
-            this.currentPage = 1;
-            
-            // Update UI với cơ chế làm mới hoàn chỉnh
-            try {
-                // Làm mới dữ liệu từ Supabase
-                await Promise.all([
-                    this.app.fundManager.loadData(),
-                    this.app.expenseManager.loadData()
-                ]);
-                
-                // Cập nhật UI
-                this.app.renderExpenses();
-                this.app.renderGroupFund();
-                
-                // Cập nhật phần kết quả tính toán
-                const members = this.app.memberManager.getAllMembers();
-                const results = this.app.expenseManager.calculateResults(members);
-                this.renderResults(results);
-                
-                // Cập nhật số dư quỹ trên tất cả các tab
-                this.updateAllFundBalanceDisplays();
-            } catch (error) {
-                console.error('Lỗi khi cập nhật giao diện:', error);
-            }
-            
+            // Reset form
             this.resetForm();
+            
+            // Refresh list and results
+            await this.renderExpenseList();
+            const results = this.app.expenseManager.calculateResults(this.app.memberManager.getAllMembers());
+            this.renderResults(results);
+            
+            // Update fund balance displays
+            this.updateAllFundBalanceDisplays();
         } catch (error) {
-            showMessage(error.message, 'error');
+            console.error('Lỗi khi lưu chi tiêu:', error);
+            showMessage(`Lỗi: ${error.message}`, 'error');
         } finally {
-            // Khôi phục trạng thái nút
+            // Re-enable button
             this.saveExpenseBtn.disabled = false;
-            this.saveBtnText.textContent = this.editingExpenseId ? 'Cập nhật' : 'Lưu chi tiêu';
+            this.saveBtnText.textContent = 'Lưu chi tiêu';
         }
     }
     
@@ -990,59 +1024,76 @@ export class ExpenseUIController extends UIController {
     }
     
     /**
-     * Handle edit expense action
-     * @param {string} expenseId - The expense ID
+     * Handle edit expense
+     * @param {string} expenseId - The expense ID to edit
      */
     handleEditExpense(expenseId) {
         const expense = this.app.expenseManager.getExpenseById(expenseId);
-        if (!expense) return;
+        if (!expense) {
+            showMessage('Không tìm thấy chi tiêu', 'error');
+            return;
+        }
         
-        // Set editing state
-        this.editingExpenseId = expenseId;
-        this.editExpenseIdInput.value = expenseId;
+        console.log('Editing expense with data:', expense);
         
-        // Update form UI
-        this.formTitle.textContent = 'Sửa chi tiêu';
-        this.saveBtnText.textContent = 'Cập nhật';
-        this.saveExpenseBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
-        this.saveExpenseBtn.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
-        this.cancelEditBtn.classList.remove('hidden');
-        
-        // Populate form data
+        // Set form values
+        this.editExpenseIdInput.value = expense.id;
         this.expenseNameInput.value = expense.name;
-        this.expenseAmountInput.value = formatAmountInput(expense.amount.toString());
+        this.expenseAmountInput.value = formatAmountInput(expense.amount);
         this.expenseDateInput.value = expense.date;
         this.payerSelect.value = expense.payer;
         
-        // Set participant checkboxes
-        this.participantsListDiv.querySelectorAll('.participant-checkbox').forEach(checkbox => {
+        // Check participant checkboxes
+        const checkboxes = this.participantsListDiv.querySelectorAll('.participant-checkbox');
+        checkboxes.forEach(checkbox => {
             checkbox.checked = expense.participants.includes(checkbox.value);
         });
-        this.updateToggleAllButtonState();
         
-        // Set split equally toggle
+        // Set split method
         this.splitEquallyToggle.checked = expense.equalSplit;
-        
-        // Handle manual split section visibility
-        if (!expense.equalSplit) {
-            this.manualSplitSection.classList.remove('hidden');
-            this.renderManualSplitInputs();
-            
-            // Populate split amounts
-            Object.entries(expense.splits).forEach(([participant, splitAmount]) => {
-                const input = document.getElementById(`split-amount-${participant}`);
-                if (input) {
-                    input.value = formatAmountInput(splitAmount.toString());
-                }
-            });
-            
-            this.updateManualSplitTotal();
-        } else {
+        if (expense.equalSplit) {
             this.manualSplitSection.classList.add('hidden');
+        } else {
+            this.manualSplitSection.classList.remove('hidden');
+            this.renderManualSplitInputs(expense.splits);
         }
         
+        // Handle location data
+        if (expense.location && expense.location.lat && expense.location.lng && this.saveLocationToggle) {
+            // Enable location toggle
+            this.saveLocationToggle.checked = true;
+            this.locationCaptureSection.classList.remove('hidden');
+            
+            // Set location values
+            this.locationLat.value = expense.location.lat;
+            this.locationLng.value = expense.location.lng;
+            this.locationName.value = expense.location.name || '';
+            
+            this.locationStatus.textContent = `Đã lấy vị trí: ${parseFloat(expense.location.lat).toFixed(6)}, ${parseFloat(expense.location.lng).toFixed(6)}`;
+            this.locationStatus.classList.add('text-green-600');
+            this.locationStatus.classList.remove('text-gray-600', 'text-red-600');
+        } else if (this.saveLocationToggle) {
+            // Reset location fields
+            this.saveLocationToggle.checked = false;
+            this.locationCaptureSection.classList.add('hidden');
+            this.locationLat.value = '';
+            this.locationLng.value = '';
+            this.locationName.value = '';
+            this.locationStatus.textContent = 'Chưa có vị trí nào được lưu';
+            this.locationStatus.classList.remove('text-green-600', 'text-red-600');
+            this.locationStatus.classList.add('text-gray-600');
+        }
+        
+        // Update UI state for editing
+        this.editingExpenseId = expense.id;
+        this.formTitle.textContent = 'Sửa chi tiêu';
+        this.saveBtnText.textContent = 'Cập nhật';
+        this.cancelEditBtn.classList.remove('hidden');
+        
         // Scroll to form
-        document.getElementById('expense-form-section').scrollIntoView({
+        this.expenseNameInput.focus();
+        window.scrollTo({
+            top: document.getElementById('expense-form-section').offsetTop - 20,
             behavior: 'smooth'
         });
     }
@@ -1903,6 +1954,17 @@ export class ExpenseUIController extends UIController {
      * @param {string} expenseName - The name of the expense
      */
     showLocationOnMap(location, expenseName) {
+        // Parse location if it's a string
+        if (location && typeof location === 'string') {
+            try {
+                location = JSON.parse(location);
+                console.log('Parsed location from string:', location);
+            } catch (e) {
+                console.error('Failed to parse location string:', e);
+                location = null;
+            }
+        }
+        
         if (!location || !location.lat || !location.lng) {
             showMessage('Không có thông tin vị trí cho chi tiêu này', 'error');
             return;
@@ -1939,5 +2001,220 @@ export class ExpenseUIController extends UIController {
             // Cần cập nhật kích thước để Leaflet hiển thị đúng
             this.map.invalidateSize();
         }, 100);
+    }
+
+    /**
+     * Create expense list item HTML
+     * @param {Expense} expense - The expense object
+     * @returns {HTMLElement} The created HTML element
+     */
+    createExpenseListItem(expense) {
+        const item = document.createElement('div');
+        item.className = 'expense-item bg-white border border-gray-200 rounded-lg shadow-sm transition-all duration-200 overflow-hidden hover:shadow-md';
+        item.setAttribute('data-id', expense.id);
+        
+        // Debug location data
+        console.log('Expense:', expense.id, 'Location data type:', typeof expense.location, 'Value:', expense.location);
+        
+        const equalSplit = expense.equalSplit;
+        
+        // Get formatted values
+        const formattedAmount = formatCurrency(expense.amount);
+        const formattedDate = formatDisplayDate(expense.date);
+        
+        // Determine payer display (special case for group fund)
+        const isGroupFund = expense.payer === this.app.expenseManager.GROUP_FUND_PAYER_ID;
+        const payerDisplayClass = isGroupFund ? 'text-sky-700 font-semibold' : '';
+        
+        // Get the participant info for displaying split amounts
+        const participantsList = expense.participants.map(participant => {
+            const splitAmount = expense.getSplitAmountFor(participant);
+            return `<span class="text-sm mr-1">${participant}: ${formatCurrency(splitAmount)}</span>`;
+        }).join('');
+        
+        // Create timestamp display
+        const timestampHtml = expense.created_at 
+            ? `<div class="text-xs text-gray-500 mt-1">${formatTimestamp(expense.created_at)}</div>` 
+            : '';
+        
+        // Parse location if it's a string
+        let location = expense.location;
+        if (location && typeof location === 'string') {
+            try {
+                location = JSON.parse(location);
+                console.log('Successfully parsed location from string:', location);
+            } catch (e) {
+                console.error('Failed to parse location string:', e);
+                location = null;
+            }
+        }
+            
+        // Check if expense has location data
+        const hasLocation = location && location.lat && location.lng;
+        
+        // Add location badge to expense header if location exists
+        const locationBadge = hasLocation 
+            ? `<span class="inline-flex items-center ml-2 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                <i data-lucide="map-pin" class="w-3 h-3 mr-1"></i>Có vị trí
+               </span>` 
+            : '';
+            
+        // Location button for detailed view
+        const locationBtn = hasLocation 
+            ? `<button class="view-location-btn text-blue-600 hover:text-blue-800 flex items-center mr-3" data-id="${expense.id}">
+                <i data-lucide="map-pin" class="w-4 h-4 mr-1"></i>
+                Xem vị trí
+               </button>` 
+            : '';
+            
+        // Location details if available
+        const locationDetails = hasLocation 
+            ? `<div class="mt-2 text-sm">
+                <p class="font-medium text-gray-700">Vị trí chi tiêu:</p>
+                <p class="text-gray-600">${location.name || 'Không có tên địa điểm'}</p>
+                <p class="text-xs text-gray-500">
+                  Tọa độ: ${parseFloat(location.lat).toFixed(6)}, ${parseFloat(location.lng).toFixed(6)}
+                </p>
+               </div>` 
+            : '';
+            
+        const editButton = `<button class="edit-expense-btn text-blue-600 hover:text-blue-800 mr-2" data-id="${expense.id}">
+            <i data-lucide="edit" class="w-4 h-4"></i>
+        </button>`;
+        
+        const deleteButton = `<button class="delete-expense-btn text-red-600 hover:text-red-800" data-id="${expense.id}">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+        </button>`;
+        
+        const copyButton = `<button class="copy-expense-btn text-green-600 hover:text-green-800 mr-2" data-id="${expense.id}">
+            <i data-lucide="copy" class="w-4 h-4"></i>
+        </button>`;
+        
+        // Create a separate badge for the unexpanded view
+        const locationBadgeOutside = hasLocation 
+            ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 ml-2">
+                <i data-lucide="map-pin" class="w-3 h-3 mr-1"></i>Vị trí
+               </span>` 
+            : '';
+        
+        item.innerHTML = `
+            <div class="p-4">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900 flex items-center">
+                            ${expense.name}
+                            ${locationBadge}
+                        </h3>
+                        <p class="text-sm text-gray-600">
+                            <span class="mr-2">Ngày: ${formattedDate}</span>
+                            <span>Người trả: <span class="${payerDisplayClass}">${expense.payer}</span></span>
+                            ${locationBadgeOutside}
+                        </p>
+                        ${timestampHtml}
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xl font-bold text-green-600">${formattedAmount}</p>
+                        <p class="text-xs text-gray-500">${equalSplit ? 'Chia đều' : 'Chia tay'}</p>
+                    </div>
+                </div>
+                <div class="expense-details hidden mt-4 border-t border-gray-100 pt-3">
+                    <p class="text-sm font-medium text-gray-700 mb-1">Chi tiết chia tiền:</p>
+                    <div class="flex flex-wrap gap-2">
+                        ${participantsList}
+                    </div>
+                    ${locationDetails}
+                    <div class="flex justify-between items-center mt-3 pt-2 border-t border-gray-100">
+                        <div class="flex items-center">
+                            ${locationBtn}
+                            ${copyButton}
+                            ${editButton}
+                            ${deleteButton}
+                        </div>
+                        <button class="collapse-btn text-gray-600 hover:text-gray-800">
+                            <i data-lucide="chevron-up" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                </div>
+                <button class="expand-btn text-gray-600 hover:text-gray-800 mt-2 w-full flex justify-center">
+                    <i data-lucide="chevron-down" class="w-5 h-5"></i>
+                </button>
+            </div>
+        `;
+        
+        // Add event listeners
+        setTimeout(() => {
+            // Initialize Lucide icons in the newly created element
+            lucide.createIcons({
+                attrs: {
+                    'stroke-width': 1.5
+                },
+                bindToElement: item
+            });
+            
+            // Expand/collapse functionality
+            const expandBtn = item.querySelector('.expand-btn');
+            const collapseBtn = item.querySelector('.collapse-btn');
+            const detailsSection = item.querySelector('.expense-details');
+            
+            if (expandBtn) {
+                expandBtn.addEventListener('click', () => {
+                    detailsSection.classList.remove('hidden');
+                    expandBtn.classList.add('hidden');
+                });
+            }
+            
+            if (collapseBtn) {
+                collapseBtn.addEventListener('click', () => {
+                    detailsSection.classList.add('hidden');
+                    expandBtn.classList.remove('hidden');
+                });
+            }
+            
+            // Edit button
+            const editBtn = item.querySelector('.edit-expense-btn');
+            if (editBtn) {
+                editBtn.addEventListener('click', () => {
+                    this.handleEditExpense(expense.id);
+                });
+            }
+            
+            // Delete button
+            const deleteBtn = item.querySelector('.delete-expense-btn');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', () => {
+                    this.handleDeleteExpense(expense.id);
+                });
+            }
+            
+            // Copy button
+            const copyBtn = item.querySelector('.copy-expense-btn');
+            if (copyBtn) {
+                copyBtn.addEventListener('click', () => {
+                    this.handleCopyExpense(expense.id);
+                });
+            }
+            
+            // View location button
+            const viewLocationBtn = item.querySelector('.view-location-btn');
+            if (viewLocationBtn && expense.location) {
+                viewLocationBtn.addEventListener('click', () => {
+                    let loc = expense.location;
+                    // Parse location if it's a string
+                    if (typeof loc === 'string') {
+                        try {
+                            loc = JSON.parse(loc);
+                        } catch (e) {
+                            console.error('Không thể phân tích dữ liệu vị trí:', e);
+                            showMessage('Không thể hiển thị vị trí', 'error');
+                            return;
+                        }
+                    }
+                    this.showLocationOnMap(loc, expense.name);
+                });
+            }
+            
+        }, 0);
+        
+        return item;
     }
 } 

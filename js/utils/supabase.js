@@ -111,19 +111,41 @@ export async function getExpenses() {
         return [];
     }
     
+    // Debug log raw data from database
+    if (data && data.length > 0) {
+        console.log("DEBUG - Raw expense data from API:", data[0]);
+        if (data[0].location) {
+            console.log("DEBUG - Raw location structure:", {
+                type: typeof data[0].location,
+                value: data[0].location,
+                stringified: JSON.stringify(data[0].location)
+            });
+        }
+    }
+    
     // Chuyển đổi dữ liệu từ định dạng DB sang định dạng ứng dụng
-    return data.map(expense => ({
-        id: expense.id,
-        name: expense.name,
-        amount: expense.amount,
-        date: expense.date,
-        payer: expense.payer,
-        participants: expense.participants,
-        equalSplit: expense.equal_split,
-        splits: expense.splits || {},
-        created_at: expense.created_at,
-        location: expense.location
-    }));
+    return data.map(expense => {
+        // Additional debug for each expense's location
+        if (expense.location) {
+            console.log(`DEBUG - Processing location for expense ${expense.id}:`, {
+                locationBeforeTransform: expense.location,
+                locationStringified: JSON.stringify(expense.location)
+            });
+        }
+        
+        return {
+            id: expense.id,
+            name: expense.name,
+            amount: expense.amount,
+            date: expense.date,
+            payer: expense.payer,
+            participants: expense.participants,
+            equalSplit: expense.equal_split,
+            splits: expense.splits || {},
+            created_at: expense.created_at,
+            location: expense.location // Preserve original location structure
+        };
+    });
 }
 
 /**
@@ -170,18 +192,28 @@ export async function getPaginatedExpenses(page = 1, perPage = 5, sortBy = 'crea
     }
     
     // Chuyển đổi dữ liệu từ định dạng DB sang định dạng ứng dụng
-    const items = data.map(expense => ({
-        id: expense.id,
-        name: expense.name,
-        amount: expense.amount,
-        date: expense.date,
-        payer: expense.payer,
-        participants: expense.participants,
-        equalSplit: expense.equal_split,
-        splits: expense.splits || {},
-        created_at: expense.created_at,
-        location: expense.location
-    }));
+    const items = data.map(expense => {
+        // Debug log for location data in paginated API
+        if (expense.location) {
+            console.log(`DEBUG - Paginated location for expense ${expense.id}:`, {
+                locationData: expense.location,
+                locationSerialized: JSON.stringify(expense.location)
+            });
+        }
+        
+        return {
+            id: expense.id,
+            name: expense.name,
+            amount: expense.amount,
+            date: expense.date,
+            payer: expense.payer,
+            participants: expense.participants,
+            equalSplit: expense.equal_split,
+            splits: expense.splits || {},
+            created_at: expense.created_at,
+            location: expense.location // Keep the original format
+        };
+    });
     
     // Tính toán chi tiết phân trang
     const totalPages = Math.ceil(totalItems / perPage);

@@ -95,6 +95,31 @@ export class Expense {
      * @returns {Expense} New Expense instance
      */
     static fromObject(obj) {
-        return new Expense(obj);
+        console.log("DEBUG - Expense.fromObject input:", {
+            id: obj.id,
+            name: obj.name,
+            hasLocation: !!obj.location,
+            locationType: typeof obj.location,
+            locationValue: obj.location
+        });
+        
+        // Make a deep copy of the object to avoid reference issues
+        const expenseData = {
+            ...obj,
+            // Ensure location is properly preserved
+            location: obj.location ? (typeof obj.location === 'string' ? obj.location : {...obj.location}) : null
+        };
+        
+        const expense = new Expense(expenseData);
+        
+        console.log("DEBUG - Expense.fromObject output:", {
+            id: expense.id,
+            name: expense.name,
+            hasLocation: !!expense.location,
+            locationType: typeof expense.location,
+            locationValue: expense.location
+        });
+        
+        return expense;
     }
 } 

@@ -146,7 +146,7 @@ export class ExpenseUIController extends UIController {
         
         if (this.closeMapModalBtn) {
             this.closeMapModalBtn.addEventListener('click', () => {
-                this.mapModal.classList.add('hidden');
+                this.closeMapModal();
             });
         }
         
@@ -251,7 +251,7 @@ export class ExpenseUIController extends UIController {
     
     /**
      * Handle participant checkbox change
-     */
+     */ 
     handleParticipantChange() { 
         this.updateToggleAllButtonState();
         this.renderManualSplitInputs();
@@ -403,6 +403,13 @@ export class ExpenseUIController extends UIController {
             this.sortField, 
             this.sortDirection
         );
+        
+        // LOG RECEIVED DATA FROM API FOR DEBUGGING
+        console.log("DEBUG - API response:", paginatedData);
+        if (paginatedData.items && paginatedData.items.length > 0) {
+            console.log("DEBUG - First expense:", paginatedData.items[0]);
+            console.log("DEBUG - Location data:", paginatedData.items[0].location);
+        }
         
         // Clear loading indicator
         this.expenseList.innerHTML = '';
@@ -867,6 +874,11 @@ export class ExpenseUIController extends UIController {
         lucide.createIcons({
             scope: this.expenseList
         });
+        
+        // Call debug method to show location info
+        setTimeout(() => {
+            this.showDebugLocationInfo();
+        }, 100);
     }
     
     /**
@@ -1689,7 +1701,7 @@ export class ExpenseUIController extends UIController {
                 }
                 this.closeAllAutocomplete();
                 
-                // Focus on participants dropdown for better UX flow
+                // Focus the next input field for better UX flow
                 this.payerSelect.focus();
             });
             
@@ -1954,6 +1966,8 @@ export class ExpenseUIController extends UIController {
      * @param {string} expenseName - The name of the expense
      */
     showLocationOnMap(location, expenseName) {
+        console.log('Showing location on map for', expenseName, 'Location:', location);
+        
         // Parse location if it's a string
         if (location && typeof location === 'string') {
             try {
@@ -1961,45 +1975,87 @@ export class ExpenseUIController extends UIController {
                 console.log('Parsed location from string:', location);
             } catch (e) {
                 console.error('Failed to parse location string:', e);
-                location = null;
+                showMessage('Không thể hiển thị vị trí vì dữ liệu không hợp lệ', 'error');
+                return;
             }
         }
         
-        if (!location || !location.lat || !location.lng) {
-            showMessage('Không có thông tin vị trí cho chi tiêu này', 'error');
+        // Handle nested location objects
+        if (location && typeof location === 'object' && location.location && typeof location.location === 'object') {
+            location = location.location;
+            console.log('Normalized nested location:', location);
+        }
+        
+        // Validate location object has required properties
+        if (!location || !('lat' in location) || !('lng' in location) || location.lat === null || location.lng === null) {
+            console.error('Invalid location object:', location);
+            showMessage('Không có thông tin vị trí hợp lệ cho chi tiêu này', 'error');
             return;
         }
         
         // Set modal title
         const modalTitle = document.getElementById('map-modal-title');
         if (modalTitle) {
-            modalTitle.textContent = `Vị trí: ${expenseName}`;
+            modalTitle.innerHTML = `<i data-lucide="map-pin" class="w-5 h-5 mr-2 text-blue-500"></i> ${expenseName}`;
         }
         
         // Set location name if available
         if (this.mapLocationName) {
-            this.mapLocationName.textContent = location.name || 'Vị trí không có tên';
+            const locationName = location.name || 'Vị trí không có tên';
+            this.mapLocationName.innerHTML = `
+                <div class="flex items-center">
+                    <div class="bg-blue-100 text-blue-800 rounded-full p-1.5 mr-2">
+                        <i data-lucide="map-pin" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <p class="font-medium">${locationName}</p>
+                        <p class="text-xs text-gray-500">
+                            ${parseFloat(location.lat).toFixed(6)}, ${parseFloat(location.lng).toFixed(6)}
+                        </p>
+                    </div>
+                </div>
+            `;
         }
         
-        // Show the modal
+        // Show the modal with fade-in animation
         this.mapModal.classList.remove('hidden');
+        this.mapModal.classList.add('animate-fadeIn');
         
         // Initialize map if needed or update existing map
         setTimeout(() => {
-            // Nếu bản đồ đã được khởi tạo trước đó, xóa nó để tránh lỗi
-            if (this.map) {
-                this.map.remove();
-                this.map = null;
-                this.marker = null;
+            try {
+                // Nếu bản đồ đã được khởi tạo trước đó, xóa nó để tránh lỗi
+                if (this.map) {
+                    this.map.remove();
+                    this.map = null;
+                    this.marker = null;
+                }
+                
+                // Khởi tạo bản đồ mới
+                const { map, marker } = initMap('expense-map', location);
+                this.map = map;
+                this.marker = marker;
+                
+                // Thêm custom popup cho marker
+                if (location.name) {
+                    marker.bindPopup(`<b>${location.name}</b>`).openPopup();
+                }
+                
+                // Cần cập nhật kích thước để Leaflet hiển thị đúng
+                this.map.invalidateSize();
+                
+                // Initialize icons in the modal
+                lucide.createIcons({
+                    attrs: {
+                        'stroke-width': 1.5
+                    },
+                    bindToElement: this.mapModal
+                });
+            } catch (error) {
+                console.error('Lỗi khi hiển thị bản đồ:', error);
+                showMessage('Không thể hiển thị bản đồ: ' + error.message, 'error');
+                this.closeMapModal();
             }
-            
-            // Khởi tạo bản đồ mới
-            const { map, marker } = initMap('expense-map', location);
-            this.map = map;
-            this.marker = marker;
-            
-            // Cần cập nhật kích thước để Leaflet hiển thị đúng
-            this.map.invalidateSize();
         }, 100);
     }
 
@@ -2010,11 +2066,13 @@ export class ExpenseUIController extends UIController {
      */
     createExpenseListItem(expense) {
         const item = document.createElement('div');
-        item.className = 'expense-item bg-white border border-gray-200 rounded-lg shadow-sm transition-all duration-200 overflow-hidden hover:shadow-md';
+        item.className = 'expense-item bg-white border border-gray-200 rounded-lg shadow-sm transition-all duration-200 overflow-hidden hover:shadow-md mb-4';
         item.setAttribute('data-id', expense.id);
         
-        // Debug location data
-        console.log('Expense:', expense.id, 'Location data type:', typeof expense.location, 'Value:', expense.location);
+        // Enhanced debugging for location data
+        console.log('Expense:', expense.id, 'Name:', expense.name);
+        console.log('Location data type:', typeof expense.location);
+        console.log('Location value:', expense.location);
         
         const equalSplit = expense.equalSplit;
         
@@ -2029,7 +2087,7 @@ export class ExpenseUIController extends UIController {
         // Get the participant info for displaying split amounts
         const participantsList = expense.participants.map(participant => {
             const splitAmount = expense.getSplitAmountFor(participant);
-            return `<span class="text-sm mr-1">${participant}: ${formatCurrency(splitAmount)}</span>`;
+            return `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 mr-2 mb-1">${participant}: ${formatCurrency(splitAmount)}</span>`;
         }).join('');
         
         // Create timestamp display
@@ -2048,52 +2106,121 @@ export class ExpenseUIController extends UIController {
                 location = null;
             }
         }
+        
+        // SPECIAL CASE: Handle location inside nested key-value structure
+        // This handles special case where API might return location data inside a nested structure
+        if (location && typeof location === 'object') {
+            // Case 1: Handle the case where location field might contain a location property
+            if (location.location && typeof location.location === 'object') {
+                console.log('Found nested location.location structure, using that instead');
+                location = location.location;
+            }
             
-        // Check if expense has location data
-        const hasLocation = location && location.lat && location.lng;
+            // Case 2: Handle the case where API directly returns lat/lng at top level with location.name
+            if (!('lat' in location) && !('lng' in location) && location.name) {
+                const nameValue = location.name;
+                if (typeof nameValue === 'object' && 'lat' in nameValue && 'lng' in nameValue) {
+                    console.log('Found lat/lng inside name property, restructuring');
+                    location = nameValue;
+                }
+            }
+            
+            // Debug location structure 
+            console.log('Final location structure:', {
+                hasLat: 'lat' in location,
+                hasLng: 'lng' in location,
+                hasName: 'name' in location,
+                lat: location.lat,
+                lng: location.lng,
+                name: location.name
+            });
+        }
+        
+        // FIX: Check location structure and normalize it if needed
+        // Handle case where location may have nested structure or incorrect format
+        if (location && typeof location === 'object') {            
+            // Debug location object structure
+            console.log('Location structure check:', {
+                hasLat: 'lat' in location,
+                hasLng: 'lng' in location,
+                lat: location.lat,
+                lng: location.lng,
+                name: location.name
+            });
+        }
+            
+        // Start with raw location display regardless of format
+        let rawLocationDisplay = '';
+        if (expense.location) {
+            const locationStr = typeof expense.location === 'string' 
+                ? expense.location 
+                : JSON.stringify(expense.location);
+            
+            rawLocationDisplay = `
+                <div class="mt-2 text-sm bg-blue-50 p-2 rounded">
+                    <p class="font-medium text-blue-800">Vị trí (dữ liệu gốc):</p>
+                    <p class="text-xs text-blue-600 break-words">${locationStr}</p>
+                </div>
+            `;
+        }
+            
+        // Check if expense has location data - improved check
+        const hasLocation = location && 
+                         'lat' in location && 
+                         'lng' in location && 
+                         location.lat !== null && 
+                         location.lng !== null;
+        
+        console.log('Has location?', hasLocation);
         
         // Add location badge to expense header if location exists
         const locationBadge = hasLocation 
-            ? `<span class="inline-flex items-center ml-2 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                <i data-lucide="map-pin" class="w-3 h-3 mr-1"></i>Có vị trí
+            ? `<span class="inline-flex items-center ml-2 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 shadow-sm border border-blue-200">
+                <i data-lucide="map-pin" class="w-3 h-3 mr-1 text-blue-500"></i>Có vị trí
                </span>` 
             : '';
             
         // Location button for detailed view
         const locationBtn = hasLocation 
-            ? `<button class="view-location-btn text-blue-600 hover:text-blue-800 flex items-center mr-3" data-id="${expense.id}">
-                <i data-lucide="map-pin" class="w-4 h-4 mr-1"></i>
+            ? `<button class="view-location-btn text-blue-600 hover:text-blue-800 flex items-center mr-3 px-3 py-1.5 rounded-md hover:bg-blue-50 transition-colors duration-200" data-id="${expense.id}">
+                <i data-lucide="map-pin" class="w-4 h-4 mr-1.5"></i>
                 Xem vị trí
                </button>` 
             : '';
             
         // Location details if available
         const locationDetails = hasLocation 
-            ? `<div class="mt-2 text-sm">
-                <p class="font-medium text-gray-700">Vị trí chi tiêu:</p>
-                <p class="text-gray-600">${location.name || 'Không có tên địa điểm'}</p>
-                <p class="text-xs text-gray-500">
-                  Tọa độ: ${parseFloat(location.lat).toFixed(6)}, ${parseFloat(location.lng).toFixed(6)}
+            ? `<div class="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                <p class="font-medium text-gray-700 mb-1 flex items-center">
+                  <i data-lucide="map-pin" class="w-4 h-4 mr-1.5 text-blue-500"></i>
+                  Vị trí chi tiêu:
+                </p>
+                <p class="text-gray-600 font-medium">${location.name || 'Không có tên địa điểm'}</p>
+                <p class="text-xs text-gray-500 mt-1">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs">
+                    <i data-lucide="compass" class="w-3 h-3 mr-1"></i>
+                    ${parseFloat(location.lat).toFixed(6)}, ${parseFloat(location.lng).toFixed(6)}
+                  </span>
                 </p>
                </div>` 
-            : '';
-            
-        const editButton = `<button class="edit-expense-btn text-blue-600 hover:text-blue-800 mr-2" data-id="${expense.id}">
+            : rawLocationDisplay; // Fall back to raw display if parsed location isn't available
+        
+        const editButton = `<button class="edit-expense-btn text-blue-600 hover:text-blue-800 mr-2 p-1.5 rounded-full hover:bg-gray-100 transition-colors duration-200" data-id="${expense.id}" title="Chỉnh sửa">
             <i data-lucide="edit" class="w-4 h-4"></i>
         </button>`;
         
-        const deleteButton = `<button class="delete-expense-btn text-red-600 hover:text-red-800" data-id="${expense.id}">
+        const deleteButton = `<button class="delete-expense-btn text-red-600 hover:text-red-800 p-1.5 rounded-full hover:bg-red-50 transition-colors duration-200" data-id="${expense.id}" title="Xóa">
             <i data-lucide="trash-2" class="w-4 h-4"></i>
         </button>`;
         
-        const copyButton = `<button class="copy-expense-btn text-green-600 hover:text-green-800 mr-2" data-id="${expense.id}">
+        const copyButton = `<button class="copy-expense-btn text-green-600 hover:text-green-800 mr-2 p-1.5 rounded-full hover:bg-green-50 transition-colors duration-200" data-id="${expense.id}" title="Sao chép">
             <i data-lucide="copy" class="w-4 h-4"></i>
         </button>`;
         
         // Create a separate badge for the unexpanded view
         const locationBadgeOutside = hasLocation 
-            ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 ml-2">
-                <i data-lucide="map-pin" class="w-3 h-3 mr-1"></i>Vị trí
+            ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 ml-2 shadow-sm border border-blue-200">
+                <i data-lucide="map-pin" class="w-3 h-3 mr-1 text-blue-500"></i>Vị trí
                </span>` 
             : '';
         
@@ -2105,37 +2232,56 @@ export class ExpenseUIController extends UIController {
                             ${expense.name}
                             ${locationBadge}
                         </h3>
-                        <p class="text-sm text-gray-600">
-                            <span class="mr-2">Ngày: ${formattedDate}</span>
-                            <span>Người trả: <span class="${payerDisplayClass}">${expense.payer}</span></span>
-                            ${locationBadgeOutside}
+                        <p class="text-sm text-gray-600 mt-1">
+                            <span class="inline-flex items-center mr-3">
+                                <i data-lucide="calendar" class="w-3.5 h-3.5 mr-1 text-gray-400"></i>
+                                ${formattedDate}
+                            </span>
+                            <span class="inline-flex items-center">
+                                <i data-lucide="user" class="w-3.5 h-3.5 mr-1 text-gray-400"></i>
+                                <span class="${payerDisplayClass}">${expense.payer}</span>
+                            </span>
                         </p>
                         ${timestampHtml}
+                        
+                        <!-- Location preview always visible if exists -->
+                        ${hasLocation ? `
+                        <div class="mt-2 text-sm text-blue-600 flex items-center bg-blue-50 py-1 px-2 rounded-md border border-blue-100 w-fit hover:bg-blue-100 transition-colors cursor-pointer">
+                            <i data-lucide="map-pin" class="w-3.5 h-3.5 mr-1.5 text-blue-500"></i>
+                            <span class="truncate" style="max-width: 250px;">${location.name || 'Địa điểm chi tiêu'}</span>
+                        </div>
+                        ` : ''}
                     </div>
                     <div class="text-right">
                         <p class="text-xl font-bold text-green-600">${formattedAmount}</p>
-                        <p class="text-xs text-gray-500">${equalSplit ? 'Chia đều' : 'Chia tay'}</p>
+                        <p class="text-xs text-gray-500 mt-1 inline-flex items-center justify-end w-full">
+                            <i data-lucide="${equalSplit ? 'split' : 'calculator'}" class="w-3.5 h-3.5 mr-1 ${equalSplit ? 'text-green-500' : 'text-orange-500'}"></i>
+                            ${equalSplit ? 'Chia đều' : 'Chia tay'}
+                        </p>
                     </div>
                 </div>
                 <div class="expense-details hidden mt-4 border-t border-gray-100 pt-3">
-                    <p class="text-sm font-medium text-gray-700 mb-1">Chi tiết chia tiền:</p>
-                    <div class="flex flex-wrap gap-2">
+                    <p class="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                        <i data-lucide="list-checks" class="w-4 h-4 mr-1.5 text-gray-500"></i>
+                        Chi tiết chia tiền:
+                    </p>
+                    <div class="flex flex-wrap gap-1">
                         ${participantsList}
                     </div>
                     ${locationDetails}
-                    <div class="flex justify-between items-center mt-3 pt-2 border-t border-gray-100">
+                    <div class="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
                         <div class="flex items-center">
                             ${locationBtn}
                             ${copyButton}
                             ${editButton}
                             ${deleteButton}
                         </div>
-                        <button class="collapse-btn text-gray-600 hover:text-gray-800">
+                        <button class="collapse-btn text-gray-600 hover:text-gray-800 p-1.5 rounded-full hover:bg-gray-100 transition-colors duration-200">
                             <i data-lucide="chevron-up" class="w-5 h-5"></i>
                         </button>
                     </div>
                 </div>
-                <button class="expand-btn text-gray-600 hover:text-gray-800 mt-2 w-full flex justify-center">
+                <button class="expand-btn text-gray-600 hover:text-gray-800 mt-2 w-full flex justify-center p-1 hover:bg-gray-50 rounded-md transition-colors duration-200">
                     <i data-lucide="chevron-down" class="w-5 h-5"></i>
                 </button>
             </div>
@@ -2160,6 +2306,25 @@ export class ExpenseUIController extends UIController {
                 expandBtn.addEventListener('click', () => {
                     detailsSection.classList.remove('hidden');
                     expandBtn.classList.add('hidden');
+                    
+                    // Auto-show map if expense has location
+                    if (expense.location && hasLocation) {
+                        let loc = expense.location;
+                        // Parse location if it's a string
+                        if (typeof loc === 'string') {
+                            try {
+                                loc = JSON.parse(loc);
+                            } catch (e) {
+                                console.error('Không thể phân tích dữ liệu vị trí:', e);
+                                return;
+                            }
+                        }
+                        
+                        // Use setTimeout to ensure DOM is updated before showing map
+                        setTimeout(() => {
+                            this.showLocationOnMap(loc, expense.name);
+                        }, 100);
+                    }
                 });
             }
             
@@ -2213,8 +2378,91 @@ export class ExpenseUIController extends UIController {
                 });
             }
             
+            // Add click event to location preview
+            const locationPreview = item.querySelector('.mt-2.text-sm.text-blue-600');
+            if (locationPreview && expense.location) {
+                locationPreview.style.cursor = 'pointer';
+                locationPreview.title = 'Nhấp để xem vị trí trên bản đồ';
+                locationPreview.addEventListener('click', () => {
+                    let loc = expense.location;
+                    // Parse location if it's a string
+                    if (typeof loc === 'string') {
+                        try {
+                            loc = JSON.parse(loc);
+                        } catch (e) {
+                            console.error('Không thể phân tích dữ liệu vị trí:', e);
+                            showMessage('Không thể hiển thị vị trí', 'error');
+                            return;
+                        }
+                    }
+                    this.showLocationOnMap(loc, expense.name);
+                });
+            }
+            
         }, 0);
         
         return item;
+    }
+
+    /**
+     * Added debug method to directly show location info on all expenses
+     * This is a temporary fix to diagnose the issue
+     */
+    showDebugLocationInfo() {
+        console.log("DEBUG - Adding location debug badges to all expenses");
+        
+        // Find all expense items in the DOM
+        const expenseItems = document.querySelectorAll('.expense-item');
+        expenseItems.forEach(item => {
+            const expenseId = item.getAttribute('data-id');
+            if (!expenseId) return;
+            
+            // Find the expense object
+            const expense = this.app.expenseManager.getExpenseById(expenseId);
+            if (!expense) return;
+            
+            console.log(`DEBUG - Expense ${expenseId} (${expense.name}):`, {
+                hasLocation: !!expense.location,
+                locationType: typeof expense.location,
+                locationValue: expense.location
+            });
+            
+            // Add debug badge
+            const debugBadge = document.createElement('div');
+            debugBadge.className = 'mt-1 p-2 bg-red-100 text-xs';
+            
+            if (expense.location) {
+                const locInfo = typeof expense.location === 'string' 
+                    ? `String: ${expense.location.substring(0, 30)}...` 
+                    : `Object: lat=${expense.location.lat}, lng=${expense.location.lng}, name=${expense.location.name?.substring(0, 30) || 'N/A'}`;
+                
+                debugBadge.innerHTML = `
+                    <strong>DEBUG LOCATION:</strong> ${locInfo}
+                `;
+            } else {
+                debugBadge.textContent = 'DEBUG: No location data';
+            }
+            
+            // Add to expense item
+            const container = item.querySelector('.p-4');
+            if (container) {
+                container.appendChild(debugBadge);
+            }
+        });
+    }
+
+    /**
+     * Close the map modal
+     */
+    closeMapModal() {
+        // Hide the modal
+        this.mapModal.classList.add('hidden');
+        
+        // If map exists, remove it to free resources
+        if (this.map) {
+            this.map.remove();
+            this.map = null;
+            this.marker = null;
+        }
     }
 } 

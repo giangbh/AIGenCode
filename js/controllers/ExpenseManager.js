@@ -453,8 +453,24 @@ export class ExpenseManager {
         try {
             const result = await supabase.getPaginatedExpenses(page, perPage, sortBy, descending);
             
+            // Log original result from API
+            console.log("DEBUG - Original API response before transform:", JSON.stringify(result));
+            if (result.items && result.items.length > 0) {
+                console.log("DEBUG - API returned location data:", result.items[0].location);
+            }
+            
             // Transform expense objects to Expense instances
-            result.items = result.items.map(expenseData => Expense.fromObject(expenseData));
+            result.items = result.items.map(expenseData => {
+                // Log transformation of each item to check location
+                console.log(`DEBUG - Transforming expense ${expenseData.id}:`, 
+                    { 
+                        hasLocation: !!expenseData.location,
+                        locationType: typeof expenseData.location,
+                        locationValue: expenseData.location
+                    }
+                );
+                return Expense.fromObject(expenseData);
+            });
             
             return result;
         } catch (error) {

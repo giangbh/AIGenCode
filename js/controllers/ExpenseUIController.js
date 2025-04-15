@@ -6,6 +6,7 @@
 import { UIController } from './UIController.js';
 import { formatCurrency, formatDisplayDate, formatAmountInput, parseFormattedAmount, getTodayDateString, showMessage, formatTimestamp } from '../utils/helpers.js';
 import { isAdmin } from '../utils/auth.js';
+import { initMap, getAddressFromCoordinates, getCurrentPosition } from '../utils/maps.js';
 
 export class ExpenseUIController extends UIController {
     /**
@@ -36,11 +37,25 @@ export class ExpenseUIController extends UIController {
         this.noExpensesMessage = document.getElementById('no-expenses-message');
         this.quickDepositBtn = document.getElementById('quick-deposit-btn');
         
+        // Location-related elements
+        this.saveLocationToggle = document.getElementById('save-location-toggle');
+        this.locationCaptureSection = document.getElementById('location-capture-section');
+        this.captureLocationBtn = document.getElementById('capture-location-btn');
+        this.locationStatus = document.getElementById('location-status');
+        this.locationName = document.getElementById('location-name');
+        this.locationLat = document.getElementById('location-lat');
+        this.locationLng = document.getElementById('location-lng');
+        this.mapModal = document.getElementById('map-modal-backdrop');
+        this.closeMapModalBtn = document.getElementById('close-map-modal');
+        this.mapLocationName = document.getElementById('map-location-name');
+        
         // State
         this.editingExpenseId = null;
         this.currentPage = 1;
         this.sortField = 'created_at';
         this.sortDirection = true; // descending
+        this.map = null; // Will hold the Google Maps instance
+        this.marker = null; // Will hold the map marker
         
         // Initialize UI
         this.initUI();
@@ -113,6 +128,27 @@ export class ExpenseUIController extends UIController {
         });
         
         this.cancelEditBtn.addEventListener('click', () => this.resetForm());
+        
+        // Location-related event listeners
+        if (this.saveLocationToggle) {
+            this.saveLocationToggle.addEventListener('change', () => {
+                if (this.saveLocationToggle.checked) {
+                    this.locationCaptureSection.classList.remove('hidden');
+                } else {
+                    this.locationCaptureSection.classList.add('hidden');
+                }
+            });
+        }
+        
+        if (this.captureLocationBtn) {
+            this.captureLocationBtn.addEventListener('click', () => this.captureCurrentLocation());
+        }
+        
+        if (this.closeMapModalBtn) {
+            this.closeMapModalBtn.addEventListener('click', () => {
+                this.mapModal.classList.add('hidden');
+            });
+        }
         
         // Setup copy expense modal buttons
         const copyExpenseModal = document.getElementById('copy-expense-modal-backdrop');
@@ -1820,5 +1856,88 @@ export class ExpenseUIController extends UIController {
         }
         
         return text.trim();
+    }
+    
+    /**
+     * Capture current location
+     */
+    captureCurrentLocation() {
+        // Show loading state
+        this.locationStatus.textContent = 'Đang lấy vị trí...';
+        this.captureLocationBtn.disabled = true;
+        
+        getCurrentPosition()
+            .then(position => {
+                // Store location in hidden inputs
+                this.locationLat.value = position.lat;
+                this.locationLng.value = position.lng;
+                
+                // Display success message
+                this.locationStatus.textContent = `Đã lấy vị trí: ${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`;
+                this.locationStatus.classList.add('text-green-600');
+                this.locationStatus.classList.remove('text-gray-600', 'text-red-600');
+                
+                // Try to get a location name
+                return getAddressFromCoordinates(position.lat, position.lng)
+                    .then(address => {
+                        this.locationName.value = address;
+                    })
+                    .catch(error => {
+                        console.warn('Không thể lấy địa chỉ:', error);
+                    });
+            })
+            .catch(error => {
+                this.locationStatus.textContent = error.message;
+                this.locationStatus.classList.add('text-red-600');
+                this.locationStatus.classList.remove('text-gray-600', 'text-green-600');
+            })
+            .finally(() => {
+                // Re-enable button
+                this.captureLocationBtn.disabled = false;
+            });
+    }
+    
+    /**
+     * Show location on a map
+     * @param {Object} location - The location object {lat, lng, name}
+     * @param {string} expenseName - The name of the expense
+     */
+    showLocationOnMap(location, expenseName) {
+        if (!location || !location.lat || !location.lng) {
+            showMessage('Không có thông tin vị trí cho chi tiêu này', 'error');
+            return;
+        }
+        
+        // Set modal title
+        const modalTitle = document.getElementById('map-modal-title');
+        if (modalTitle) {
+            modalTitle.textContent = `Vị trí: ${expenseName}`;
+        }
+        
+        // Set location name if available
+        if (this.mapLocationName) {
+            this.mapLocationName.textContent = location.name || 'Vị trí không có tên';
+        }
+        
+        // Show the modal
+        this.mapModal.classList.remove('hidden');
+        
+        // Initialize map if needed or update existing map
+        setTimeout(() => {
+            // Nếu bản đồ đã được khởi tạo trước đó, xóa nó để tránh lỗi
+            if (this.map) {
+                this.map.remove();
+                this.map = null;
+                this.marker = null;
+            }
+            
+            // Khởi tạo bản đồ mới
+            const { map, marker } = initMap('expense-map', location);
+            this.map = map;
+            this.marker = marker;
+            
+            // Cần cập nhật kích thước để Leaflet hiển thị đúng
+            this.map.invalidateSize();
+        }, 100);
     }
 } 

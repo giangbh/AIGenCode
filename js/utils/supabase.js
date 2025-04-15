@@ -121,7 +121,8 @@ export async function getExpenses() {
         participants: expense.participants,
         equalSplit: expense.equal_split,
         splits: expense.splits || {},
-        created_at: expense.created_at
+        created_at: expense.created_at,
+        location: expense.location
     }));
 }
 
@@ -178,7 +179,8 @@ export async function getPaginatedExpenses(page = 1, perPage = 5, sortBy = 'crea
         participants: expense.participants,
         equalSplit: expense.equal_split,
         splits: expense.splits || {},
-        created_at: expense.created_at
+        created_at: expense.created_at,
+        location: expense.location
     }));
     
     // Tính toán chi tiết phân trang
@@ -214,7 +216,8 @@ export async function addExpense(expense) {
             payer: expense.payer,
             participants: expense.participants,
             equal_split: expense.equalSplit,
-            splits: expense.equalSplit ? null : expense.splits
+            splits: expense.equalSplit ? null : expense.splits,
+            location: expense.location
         }])
         .select();
     
@@ -233,7 +236,8 @@ export async function addExpense(expense) {
         participants: data[0].participants,
         equalSplit: data[0].equal_split,
         splits: data[0].splits || {},
-        created_at: data[0].created_at
+        created_at: data[0].created_at,
+        location: data[0].location
     };
 }
 
@@ -253,7 +257,8 @@ export async function updateExpense(id, expense) {
             payer: expense.payer,
             participants: expense.participants,
             equal_split: expense.equalSplit,
-            splits: expense.equalSplit ? null : expense.splits
+            splits: expense.equalSplit ? null : expense.splits,
+            location: expense.location
         })
         .eq('id', id)
         .select();
@@ -273,7 +278,8 @@ export async function updateExpense(id, expense) {
         participants: data[0].participants,
         equalSplit: data[0].equal_split,
         splits: data[0].splits || {},
-        created_at: data[0].created_at
+        created_at: data[0].created_at,
+        location: data[0].location
     };
 }
 

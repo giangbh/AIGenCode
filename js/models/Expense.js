@@ -18,6 +18,7 @@ export class Expense {
      * @param {Object} data.splits - Manual split amounts per person (if !equalSplit)
      * @param {string} data.id - Optional ID (generated if not provided)
      * @param {string} data.created_at - Optional creation date (YYYY-MM-DD HH:MM:SS)
+     * @param {Object} data.location - Optional location data {lat, lng, name}
      */
     constructor(data) {
         this.id = data.id || generateId();
@@ -29,6 +30,7 @@ export class Expense {
         this.equalSplit = data.equalSplit;
         this.splits = data.equalSplit ? {} : data.splits;
         this.created_at = data.created_at || null;
+        this.location = data.location || null;
     }
     
     /**
@@ -65,6 +67,7 @@ export class Expense {
         this.participants = newData.participants;
         this.equalSplit = newData.equalSplit;
         this.splits = newData.equalSplit ? {} : newData.splits;
+        this.location = newData.location || this.location;
     }
     
     /**
@@ -81,7 +84,8 @@ export class Expense {
             participants: this.participants,
             equalSplit: this.equalSplit,
             splits: this.splits,
-            created_at: this.created_at
+            created_at: this.created_at,
+            location: this.location
         };
     }
     

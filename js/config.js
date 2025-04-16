@@ -6,7 +6,7 @@
 export const CONFIG = {
     // API Keys
     API_KEYS: {
-        GEMINI: 'AIzaSyCAgIpmlYrjBHj6hL9TdtkFH-eMfRa8Hgw', // Replace with your Gemini API key
+        GEMINI: 'XXX', // Replace with your Gemini API key
     },
     
     // API Endpoints

@@ -7,6 +7,7 @@ import { UIController } from './UIController.js';
 import { formatCurrency, formatDisplayDate, getTodayDateString } from '../utils/helpers.js';
 import { createPieChart, createBarChart, createLineChart, createMultiLineChart, generatePastelColors } from '../utils/charts.js';
 import { supabase } from '../utils/storage.js';
+import { CONFIG } from '../config.js'; // Import the configuration
 
 export class ReportsUIController extends UIController {
     /**
@@ -57,6 +58,9 @@ export class ReportsUIController extends UIController {
         
         // Populate member dropdown for member report
         this.populateMemberSelect();
+        
+        // Add test API button if in development mode
+        this.addTestAPIButton();
     }
     
     /**
@@ -471,6 +475,166 @@ export class ReportsUIController extends UIController {
     }
     
     /**
+     * Categorize expense using Google Gemini AI
+     * @param {string} expenseName - The name of the expense to categorize
+     * @returns {Promise<string>} - The category assigned by AI
+     */
+    async categorizeExpenseWithGemini(expenseName) {
+        try {
+            // Use API key from config
+            const API_KEY = CONFIG.API_KEYS.GEMINI;
+            const API_ENDPOINT = CONFIG.API_ENDPOINTS.GEMINI;
+            const modelSettings = CONFIG.AI_SETTINGS.GEMINI;
+            const validCategories = CONFIG.AI_SETTINGS.EXPENSE_CATEGORIES;
+            
+            // Prepare the request to Gemini API
+            const response = await fetch(`${API_ENDPOINT}?key=${API_KEY}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: `Please categorize the following expense into exactly one of these categories: ${validCategories.map(c => `"${c}"`).join(', ')}. 
+                            Only return the category name, nothing else. No explanations.
+                            Expense name: "${expenseName}"`
+                        }]
+                    }],
+                    generationConfig: {
+                        temperature: modelSettings.temperature,
+                        topK: modelSettings.topK,
+                        topP: modelSettings.topP,
+                        maxOutputTokens: modelSettings.maxOutputTokens,
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                console.error('Gemini API error:', await response.text());
+                return this.categorizeFallback(expenseName);
+            }
+
+            const data = await response.json();
+            
+            // Extract just the category name from the response
+            if (data.candidates && data.candidates.length > 0 && 
+                data.candidates[0].content && 
+                data.candidates[0].content.parts && 
+                data.candidates[0].content.parts.length > 0) {
+                
+                const category = data.candidates[0].content.parts[0].text.trim();
+                
+                // Validate that we got a valid category
+                if (validCategories.includes(category)) {
+                    // Cache the result for future use
+                    this.categoryCache = this.categoryCache || {};
+                    this.categoryCache[expenseName.toLowerCase()] = category;
+                    
+                    return category;
+                }
+            }
+            
+            return this.categorizeFallback(expenseName);
+        } catch (error) {
+            console.error('Error categorizing with Gemini:', error);
+            return this.categorizeFallback(expenseName);
+        }
+    }
+    
+    /**
+     * Fallback categorization method using keyword matching
+     * @param {string} expenseName - The name of the expense to categorize
+     * @returns {string} - The determined category
+     */
+    categorizeFallback(expenseName) {
+        // Check if we have this in cache
+        this.categoryCache = this.categoryCache || {};
+        if (this.categoryCache[expenseName.toLowerCase()]) {
+            return this.categoryCache[expenseName.toLowerCase()];
+        }
+        
+        // Original keyword-based logic
+        let category = 'Khác';
+        const expenseNameLower = expenseName.toLowerCase();
+        
+        if (expenseNameLower.includes('ăn') || expenseNameLower.includes('cafe') || 
+            expenseNameLower.includes('cà phê') || expenseNameLower.includes('trà') || 
+            expenseNameLower.includes('đồ uống') || expenseNameLower.includes('nhà hàng')) {
+            category = 'Ăn uống';
+        } else if (expenseNameLower.includes('xe') || expenseNameLower.includes('taxi') || 
+                  expenseNameLower.includes('grab') || expenseNameLower.includes('di chuyển') || 
+                  expenseNameLower.includes('đi lại') || expenseNameLower.includes('xăng')) {
+            category = 'Đi lại';
+        } else if (expenseNameLower.includes('giải trí') || expenseNameLower.includes('phim') || 
+                  expenseNameLower.includes('game') || expenseNameLower.includes('du lịch') || 
+                  expenseNameLower.includes('chơi') || expenseNameLower.includes('tiệc')) {
+            category = 'Giải trí';
+        }
+        
+        // Cache the result
+        this.categoryCache[expenseNameLower] = category;
+        return category;
+    }
+
+    /**
+     * Bulk categorize expenses with AI
+     * @param {Array} expenses - The array of expenses to categorize
+     * @returns {Promise<Object>} - Mapping of expenses to categories
+     */
+    async categorizeExpenses(expenses) {
+        // Initialize the categoryCache if not exists
+        this.categoryCache = this.categoryCache || {};
+        
+        // Create a mapping of expense names to their categories
+        const categories = {};
+        
+        // First pass: use cached categories or fallback
+        for (const expense of expenses) {
+            const expenseName = expense.name.toLowerCase();
+            if (this.categoryCache[expenseName]) {
+                categories[expense.id] = this.categoryCache[expenseName];
+            } else {
+                // Use fallback initially for quick rendering
+                categories[expense.id] = this.categorizeFallback(expense.name);
+            }
+        }
+        
+        // Second pass: asynchronously update with AI categories
+        // Use a limited batch to avoid overwhelming the API
+        const MAX_BATCH_SIZE = CONFIG.CACHE.MAX_BATCH_SIZE;
+        const toProcess = expenses.filter(e => !this.categoryCache[e.name.toLowerCase()]).slice(0, MAX_BATCH_SIZE);
+        
+        for (const expense of toProcess) {
+            const aiCategory = await this.categorizeExpenseWithGemini(expense.name);
+            // Update the category with AI result
+            categories[expense.id] = aiCategory;
+            // Update the view if needed
+            this.updateCategoryInCharts(expense.id, aiCategory);
+        }
+        
+        return categories;
+    }
+    
+    /**
+     * Update a category in charts if needed
+     * @param {string} expenseId - The ID of the expense to update
+     * @param {string} category - The new category
+     */
+    updateCategoryInCharts(expenseId, category) {
+        // This would be implemented to update charts dynamically
+        // If the category changed after AI analysis
+        
+        // For now, just log that we've updated
+        console.log(`Updated category for expense ${expenseId} to ${category}`);
+        
+        // In a real implementation, you might want to:
+        // 1. Check if this is a different category than before
+        // 2. Update the chart data
+        // 3. Re-render the chart with new data
+    }
+    
+    /**
      * Render general report charts
      */
     renderGeneralReportCharts(expenses, fromDate, toDate) {
@@ -494,39 +658,88 @@ export class ReportsUIController extends UIController {
             return;
         }
         
-        // Phân loại chi tiêu theo các nhóm
-        const categories = {};
+        // Show loading indicator
+        const loadingIndicator = document.getElementById('category-chart-loading');
+        if (loadingIndicator) loadingIndicator.classList.remove('hidden');
+        
+        // Initialize with fallback categorization first for quick display
+        const initialCategories = {};
         expenses.forEach(expense => {
-            // Đơn giản hóa, phân loại dựa trên tên chi tiêu
-            // Trong thực tế, bạn có thể thêm trường category vào model chi tiêu
-            let category = 'Khác';
-            const expenseName = expense.name.toLowerCase();
-            
-            if (expenseName.includes('ăn') || expenseName.includes('cafe') || 
-                expenseName.includes('cà phê') || expenseName.includes('trà') || 
-                expenseName.includes('đồ uống') || expenseName.includes('nhà hàng')) {
-                category = 'Ăn uống';
-            } else if (expenseName.includes('xe') || expenseName.includes('taxi') || 
-                       expenseName.includes('grab') || expenseName.includes('di chuyển') || 
-                       expenseName.includes('đi lại') || expenseName.includes('xăng')) {
-                category = 'Đi lại';
-            } else if (expenseName.includes('giải trí') || expenseName.includes('phim') || 
-                       expenseName.includes('game') || expenseName.includes('du lịch') || 
-                       expenseName.includes('chơi') || expenseName.includes('tiệc')) {
-                category = 'Giải trí';
-            }
-            
-            if (!categories[category]) {
-                categories[category] = 0;
-            }
-            categories[category] += expense.amount;
+            const category = this.categorizeFallback(expense.name);
+            initialCategories[expense.id] = category;
         });
         
-        // Chuẩn bị dữ liệu cho biểu đồ phân loại
-        const categoryLabels = Object.keys(categories);
-        const categoryData = categoryLabels.map(cat => categories[cat]);
-        const categoryColors = ['#16a34a', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ef4444', '#10b981', '#6366f1'];
+        // Aggregate initial categories
+        const categoryAmounts = this.aggregateByCategory(expenses, initialCategories);
         
+        // Draw initial chart
+        this.drawCategoryChart(categoryAmounts);
+        
+        // Then run AI categorization asynchronously and update if needed
+        this.categorizeExpenses(expenses).then(aiCategories => {
+            // Aggregate with AI categories
+            const updatedCategoryAmounts = this.aggregateByCategory(expenses, aiCategories);
+            
+            // Update chart if categories changed
+            if (JSON.stringify(categoryAmounts) !== JSON.stringify(updatedCategoryAmounts)) {
+                this.drawCategoryChart(updatedCategoryAmounts);
+            }
+            
+            // Hide loading indicator
+            if (loadingIndicator) loadingIndicator.classList.add('hidden');
+        }).catch(error => {
+            console.error('Error with AI categorization:', error);
+            // Hide loading indicator
+            if (loadingIndicator) loadingIndicator.classList.add('hidden');
+        });
+        
+        // Continue with time-based chart which doesn't depend on categories
+        this.renderTimeChart(expenses);
+    }
+    
+    /**
+     * Aggregate expenses by category
+     * @param {Array} expenses - The expenses to aggregate
+     * @param {Object} categoriesMap - Mapping of expense IDs to categories
+     * @returns {Object} - Categories with amounts
+     */
+    aggregateByCategory(expenses, categoriesMap) {
+        const categoryAmounts = {};
+        
+        expenses.forEach(expense => {
+            const category = categoriesMap[expense.id] || 'Khác';
+            
+            if (!categoryAmounts[category]) {
+                categoryAmounts[category] = 0;
+            }
+            categoryAmounts[category] += expense.amount;
+        });
+        
+        return categoryAmounts;
+    }
+    
+    /**
+     * Draw category chart
+     * @param {Object} categoryAmounts - Categories with amounts
+     */
+    drawCategoryChart(categoryAmounts) {
+        // Chuẩn bị dữ liệu cho biểu đồ phân loại
+        const categoryLabels = Object.keys(categoryAmounts);
+        const categoryData = categoryLabels.map(cat => categoryAmounts[cat]);
+        
+        // Predefined colors for consistent categories
+        const categoryColorMap = {
+            'Ăn uống': '#16a34a',
+            'Đi lại': '#0ea5e9',
+            'Giải trí': '#8b5cf6',
+            'Mua sắm': '#f59e0b',
+            'Tiện ích': '#ef4444',
+            'Khác': '#6366f1'
+        };
+        
+        const categoryColors = categoryLabels.map(category => 
+            categoryColorMap[category] || '#10b981');
+            
         // Tạo biểu đồ phân loại chi tiêu
         const categoryChartEl = document.getElementById('general-report-category-chart');
         if (categoryChartEl) {
@@ -539,11 +752,17 @@ export class ReportsUIController extends UIController {
                 'general-report-category-chart', 
                 categoryData, 
                 categoryLabels, 
-                categoryColors.slice(0, categoryLabels.length), 
+                categoryColors, 
                 'Phân loại chi tiêu'
             );
         }
-        
+    }
+    
+    /**
+     * Render time chart separately
+     * @param {Array} expenses - The expenses to render
+     */
+    renderTimeChart(expenses) {
         // Phân loại theo thời gian - theo tháng
         const timeData = {};
         expenses.forEach(expense => {
@@ -585,7 +804,9 @@ export class ReportsUIController extends UIController {
             );
         }
         
-        // Hiện thông báo thống kê
+        // Hiện thông báo thống kê (restored from original code)
+        const fromDate = document.getElementById('general-report-from-date').value;
+        const toDate = document.getElementById('general-report-to-date').value;
         const fromDateObj = new Date(fromDate);
         const toDateObj = new Date(toDate);
         console.log(`Đã tạo báo cáo chi tiêu chung từ ${fromDateObj.toLocaleDateString('vi-VN')} đến ${toDateObj.toLocaleDateString('vi-VN')}`);
@@ -1212,6 +1433,157 @@ export class ReportsUIController extends UIController {
         doc.save(`bao-cao-quy-${this.currentFundReportData.fromDate}-den-${this.currentFundReportData.toDate}.pdf`);
         
         console.log('Đã xuất báo cáo PDF thành công');
+    }
+
+    /**
+     * Test the Gemini API connection
+     * This method can be called from the console to verify API functionality
+     * @returns {Promise<boolean>} - Whether the API call was successful
+     */
+    async testGeminiAPI() {
+        try {
+            console.log('Testing Gemini API connection...');
+            
+            // Get the configuration
+            const API_KEY = CONFIG.API_KEYS.GEMINI;
+            const API_ENDPOINT = CONFIG.API_ENDPOINTS.GEMINI;
+            const modelSettings = CONFIG.AI_SETTINGS.GEMINI;
+            
+            console.log('Using API key:', API_KEY.substring(0, 5) + '...' + API_KEY.substring(API_KEY.length - 4));
+            console.log('Using endpoint:', API_ENDPOINT);
+            
+            // Simple test prompt
+            const testPrompt = "Categorize this expense: 'Dinner at restaurant' into one of these categories: Ăn uống, Đi lại, Giải trí";
+            
+            // Make the API call
+            const response = await fetch(`${API_ENDPOINT}?key=${API_KEY}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: testPrompt
+                        }]
+                    }],
+                    generationConfig: {
+                        temperature: modelSettings.temperature,
+                        topK: modelSettings.topK,
+                        topP: modelSettings.topP,
+                        maxOutputTokens: modelSettings.maxOutputTokens,
+                    }
+                })
+            });
+            
+            // Check response status
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('API Error:', response.status, errorText);
+                return false;
+            }
+            
+            // Parse and log response
+            const data = await response.json();
+            console.log('API Response:', data);
+            
+            if (data.candidates && data.candidates.length > 0 && 
+                data.candidates[0].content && 
+                data.candidates[0].content.parts && 
+                data.candidates[0].content.parts.length > 0) {
+                
+                const result = data.candidates[0].content.parts[0].text.trim();
+                console.log('Gemini API test successful! Result:', result);
+                return true;
+            } else {
+                console.error('Unexpected response format:', data);
+                return false;
+            }
+        } catch (error) {
+            console.error('Error testing Gemini API:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Add a test button for Gemini API in development environment
+     */
+    addTestAPIButton() {
+        // Only add in development environments
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            const generalReportTab = document.getElementById('general-tab-content');
+            if (generalReportTab) {
+                const testButtonContainer = document.createElement('div');
+                testButtonContainer.className = 'mt-4 mb-2 flex justify-end';
+                
+                const testButton = document.createElement('button');
+                testButton.id = 'test-gemini-api-btn';
+                testButton.className = 'px-3 py-1 bg-purple-100 text-purple-700 text-sm rounded border border-purple-300 hover:bg-purple-200 flex items-center';
+                testButton.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Test Gemini API
+                `;
+                
+                testButton.addEventListener('click', async () => {
+                    testButton.disabled = true;
+                    testButton.innerHTML = `
+                        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-purple-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Testing...
+                    `;
+                    
+                    try {
+                        const result = await this.testGeminiAPI();
+                        
+                        if (result) {
+                            alert('Gemini API test successful! Check console for details.');
+                            testButton.className = 'px-3 py-1 bg-green-100 text-green-700 text-sm rounded border border-green-300 hover:bg-green-200 flex items-center';
+                            testButton.innerHTML = `
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                API Works!
+                            `;
+                        } else {
+                            alert('Gemini API test failed. Check console for details.');
+                            testButton.className = 'px-3 py-1 bg-red-100 text-red-700 text-sm rounded border border-red-300 hover:bg-red-200 flex items-center';
+                            testButton.innerHTML = `
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                API Failed
+                            `;
+                        }
+                    } catch (error) {
+                        console.error('Error during API test:', error);
+                        alert('Error testing Gemini API: ' + error.message);
+                        testButton.className = 'px-3 py-1 bg-red-100 text-red-700 text-sm rounded border border-red-300 hover:bg-red-200 flex items-center';
+                        testButton.innerHTML = `
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                            Error
+                        `;
+                    }
+                    
+                    testButton.disabled = false;
+                });
+                
+                testButtonContainer.appendChild(testButton);
+                
+                // Add before the first chart container
+                const chartContainer = generalReportTab.querySelector('#category-chart-container');
+                if (chartContainer) {
+                    generalReportTab.insertBefore(testButtonContainer, chartContainer);
+                } else {
+                    generalReportTab.appendChild(testButtonContainer);
+                }
+            }
+        }
     }
 }
 

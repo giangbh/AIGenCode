@@ -14,7 +14,7 @@ import { initializeStorage, clearAllData, supabase } from './utils/storage.js';
 import { showMessage } from './utils/helpers.js';
 import { initAuth, isLoggedIn, getLoggedInUser, isAdmin } from './utils/auth.js';
 
-class App {
+export class App {
     /**
      * Create a new App instance
      */

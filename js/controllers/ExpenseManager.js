@@ -241,19 +241,31 @@ export class ExpenseManager {
             
             hasNonFundExpenses = true;
             
-            // Add what the payer paid
-            balances[expense.payer].paid += amount;
+            // Add what the payer paid - make sure payer exists in balances
+            if (expense.payer && balances[expense.payer]) {
+                balances[expense.payer].paid += amount;
+            } else {
+                console.warn(`Payer '${expense.payer}' not found in member list. Skipping payment calculation.`);
+            }
             
             // Add what each participant owes
             if (expense.equalSplit) {
                 const equalSplit = amount / expense.participants.length;
                 expense.participants.forEach(participant => {
-                    balances[participant].owes += equalSplit;
+                    if (balances[participant]) {
+                        balances[participant].owes += equalSplit;
+                    } else {
+                        console.warn(`Participant '${participant}' not found in member list. Skipping owed calculation.`);
+                    }
                 });
             } else {
                 // For manual splits
                 Object.entries(expense.splits).forEach(([participant, amount]) => {
-                    balances[participant].owes += amount;
+                    if (balances[participant]) {
+                        balances[participant].owes += amount;
+                    } else {
+                        console.warn(`Participant '${participant}' not found in member list. Skipping split calculation.`);
+                    }
                 });
             }
         });
@@ -262,6 +274,35 @@ export class ExpenseManager {
         members.forEach(member => {
             balances[member].net = balances[member].paid - balances[member].owes;
         });
+        
+        // Detect if all members have negative balances or all have positive balances
+        // This is an unusual case that indicates potential issues with the data
+        const allNegative = members.every(m => balances[m].net <= 0);
+        const allPositive = members.every(m => balances[m].net >= 0);
+        
+        // Tổng số dư của tất cả người dùng (lý thuyết phải bằng 0)
+        const totalNet = members.reduce((sum, m) => sum + balances[m].net, 0);
+        
+        // Ghi log nếu có bất thường về tổng số dư
+        if (Math.abs(totalNet) > 0.5) {
+            console.warn(`Bất thường: Tổng số dư khác 0 (${totalNet}). Điều này có thể do làm tròn số.`);
+        }
+        
+        // Check if there's an unusual state (all negative or all positive)
+        if ((allNegative || allPositive) && hasNonFundExpenses) {
+            console.warn(`Tình trạng bất thường: Tất cả thành viên đều ${allNegative ? 'nợ' : 'được nhận tiền'}.`);
+            
+            // Calculate transactions if there are non-fund expenses
+            const transactions = [];
+            return {
+                balances,
+                transactions,
+                hasNonFundExpenses,
+                abnormalState: true,
+                allNegative,
+                allPositive
+            };
+        }
         
         // Calculate transactions if there are non-fund expenses
         const transactions = [];
@@ -282,25 +323,38 @@ export class ExpenseManager {
                 }))
                 .sort((a, b) => b.amount - a.amount);
             
-            // Calculate settlement transactions
-            while (creditors.length > 0 && debtors.length > 0) {
-                const creditor = creditors[0];
-                const debtor = debtors[0];
-                
-                const amount = Math.min(creditor.amount, debtor.amount);
-                
-                transactions.push({
-                    from: debtor.name,
-                    to: creditor.name,
-                    amount: amount,
-                    formattedAmount: formatCurrency(amount)
-                });
-                
-                creditor.amount -= amount;
-                debtor.amount -= amount;
-                
-                if (creditor.amount < 1) creditors.shift();
-                if (debtor.amount < 1) debtors.shift();
+            // Check if we have both creditors and debtors
+            const needsSettlement = creditors.length > 0 && debtors.length > 0;
+            
+            // Calculate settlement transactions only if we have both creditors and debtors
+            if (needsSettlement) {
+                // Calculate settlement transactions
+                while (creditors.length > 0 && debtors.length > 0) {
+                    const creditor = creditors[0];
+                    const debtor = debtors[0];
+                    
+                    // Handle tiny amounts that might be due to rounding errors
+                    if (creditor.amount < 1 || debtor.amount < 1) {
+                        if (creditor.amount < 1) creditors.shift();
+                        if (debtor.amount < 1) debtors.shift();
+                        continue;
+                    }
+                    
+                    const amount = Math.min(creditor.amount, debtor.amount);
+                    
+                    transactions.push({
+                        from: debtor.name,
+                        to: creditor.name,
+                        amount: amount,
+                        formattedAmount: formatCurrency(amount)
+                    });
+                    
+                    creditor.amount -= amount;
+                    debtor.amount -= amount;
+                    
+                    if (creditor.amount < 1) creditors.shift();
+                    if (debtor.amount < 1) debtors.shift();
+                }
             }
         }
         
@@ -454,21 +508,21 @@ export class ExpenseManager {
             const result = await supabase.getPaginatedExpenses(page, perPage, sortBy, descending);
             
             // Log original result from API
-            console.log("DEBUG - Original API response before transform:", JSON.stringify(result));
+            // console.log("DEBUG - Original API response before transform:", JSON.stringify(result));
             if (result.items && result.items.length > 0) {
-                console.log("DEBUG - API returned location data:", result.items[0].location);
+                // console.log("DEBUG - API returned location data:", result.items[0].location);
             }
             
             // Transform expense objects to Expense instances
             result.items = result.items.map(expenseData => {
                 // Log transformation of each item to check location
-                console.log(`DEBUG - Transforming expense ${expenseData.id}:`, 
-                    { 
-                        hasLocation: !!expenseData.location,
-                        locationType: typeof expenseData.location,
-                        locationValue: expenseData.location
-                    }
-                );
+                // console.log(`DEBUG - Transforming expense ${expenseData.id}:`, 
+                //     { 
+                //         hasLocation: !!expenseData.location,
+                //         locationType: typeof expenseData.location,
+                //         locationValue: expenseData.location
+                //     }
+                // );
                 return Expense.fromObject(expenseData);
             });
             

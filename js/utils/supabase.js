@@ -126,12 +126,12 @@ export async function getExpenses() {
     // Chuyển đổi dữ liệu từ định dạng DB sang định dạng ứng dụng
     return data.map(expense => {
         // Additional debug for each expense's location
-        if (expense.location) {
-            console.log(`DEBUG - Processing location for expense ${expense.id}:`, {
-                locationBeforeTransform: expense.location,
-                locationStringified: JSON.stringify(expense.location)
-            });
-        }
+        // if (expense.location) {
+        //     console.log(`DEBUG - Processing location for expense ${expense.id}:`, {
+        //         locationBeforeTransform: expense.location,
+        //         locationStringified: JSON.stringify(expense.location)
+        //     });
+        // }
         
         return {
             id: expense.id,
@@ -336,7 +336,7 @@ export async function deleteExpense(id) {
 
 /**
  * Lấy tất cả giao dịch quỹ
- * @returns {Promise<Array>} Danh sách giao dịch
+ * @returns {Promise<Array>} Danh sách giao dịch quỹ
  */
 export async function getFundTransactions() {
     const { data, error } = await supabase
@@ -358,7 +358,8 @@ export async function getFundTransactions() {
         member: transaction.member,
         note: transaction.note,
         expenseId: transaction.expense_id,
-        expenseName: transaction.expense_name
+        expenseName: transaction.expense_name,
+        created_at: transaction.created_at
     }));
 }
 
@@ -394,7 +395,8 @@ export async function addDeposit(member, amount, date, note = '') {
         amount: data[0].amount,
         date: data[0].date,
         member: data[0].member,
-        note: data[0].note
+        note: data[0].note,
+        created_at: data[0].created_at
     };
 }
 
@@ -430,7 +432,8 @@ export async function addExpenseTransaction(expenseId, expenseName, amount, date
         amount: data[0].amount,
         date: data[0].date,
         expenseId: data[0].expense_id,
-        expenseName: data[0].expense_name
+        expenseName: data[0].expense_name,
+        created_at: data[0].created_at
     };
 }
 

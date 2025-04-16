@@ -95,13 +95,13 @@ export class Expense {
      * @returns {Expense} New Expense instance
      */
     static fromObject(obj) {
-        console.log("DEBUG - Expense.fromObject input:", {
-            id: obj.id,
-            name: obj.name,
-            hasLocation: !!obj.location,
-            locationType: typeof obj.location,
-            locationValue: obj.location
-        });
+        // console.log("DEBUG - Expense.fromObject input:", {
+        //     id: obj.id,
+        //     name: obj.name,
+        //     hasLocation: !!obj.location,
+        //     locationType: typeof obj.location,
+        //     locationValue: obj.location
+        // });
         
         // Make a deep copy of the object to avoid reference issues
         const expenseData = {
@@ -112,13 +112,13 @@ export class Expense {
         
         const expense = new Expense(expenseData);
         
-        console.log("DEBUG - Expense.fromObject output:", {
-            id: expense.id,
-            name: expense.name,
-            hasLocation: !!expense.location,
-            locationType: typeof expense.location,
-            locationValue: expense.location
-        });
+        // console.log("DEBUG - Expense.fromObject output:", {
+        //     id: expense.id,
+        //     name: expense.name,
+        //     hasLocation: !!expense.location,
+        //     locationType: typeof expense.location,
+        //     locationValue: expense.location
+        // });
         
         return expense;
     }

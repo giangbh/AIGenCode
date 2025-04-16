@@ -39,6 +39,9 @@ export class ReportsUIController extends UIController {
         this.currentFundReportData = null;
         this.currentGeneralReportData = null;
         
+        // Initialize category cache
+        this.initCategoryCache();
+        
         // Initialize UI
         this.initReportsUI();
     }
@@ -284,7 +287,7 @@ export class ReportsUIController extends UIController {
             // Render báo cáo với dữ liệu thực
             this.renderGeneralReportCharts(filteredExpenses, fromDate, toDate);
             this.renderGeneralReportSummary(filteredExpenses, fromDate, toDate);
-            this.renderGeneralExpenseTable(filteredExpenses, fromDate, toDate);
+            this.renderGeneralExpenseTable(filteredExpenses);
             
             // Ẩn trạng thái đang tải
             if (loadingElement) {
@@ -533,8 +536,7 @@ export class ReportsUIController extends UIController {
                 // Validate that we got a valid category
                 if (validCategories.includes(category)) {
                     // Cache the result for future use
-                    this.categoryCache = this.categoryCache || {};
-                    this.categoryCache[expenseName.toLowerCase()] = category;
+                    this.addToCache(expenseName, category);
                     
                     return category;
                 } else {
@@ -553,41 +555,34 @@ export class ReportsUIController extends UIController {
     }
     
     /**
-     * Fallback categorization method using keyword matching
-     * @param {string} expenseName - The name of the expense to categorize
-     * @returns {string} - The determined category
+     * Fallback categorization based on keywords in expense name
+     * @param {string} expenseName - The expense name to categorize
+     * @returns {string} - The category based on keyword matching
      */
     categorizeFallback(expenseName) {
-        // Check if we have this in cache
-        this.categoryCache = this.categoryCache || {};
-        if (this.categoryCache[expenseName.toLowerCase()]) {
-            console.log(`📋 Sử dụng kết quả đã lưu trong cache cho "${expenseName}": "${this.categoryCache[expenseName.toLowerCase()]}"`);
-            return this.categoryCache[expenseName.toLowerCase()];
+        if (!expenseName) return 'Khác';
+        
+        // Convert to lowercase for case-insensitive matching
+        const name = expenseName.toLowerCase();
+        
+        // Check for category keywords
+        const categoryRules = CONFIG.AI_SETTINGS.CATEGORY_RULES;
+        
+        // Iterate through categories and check their keywords
+        for (const category in categoryRules) {
+            const keywords = categoryRules[category];
+            
+            // If any keyword is found in the expense name, return this category
+            if (keywords.some(keyword => name.includes(keyword.toLowerCase()))) {
+                return category;
+            }
         }
         
-        // Original keyword-based logic
-        let category = 'Khác';
-        const expenseNameLower = expenseName.toLowerCase();
+        // Log that we're using fallback categorization
+        console.log(`Phân loại "${expenseName}" thành "Khác" (sử dụng fallback)`);
         
-        if (expenseNameLower.includes('ăn') || expenseNameLower.includes('cafe') || 
-            expenseNameLower.includes('cà phê') || expenseNameLower.includes('trà') || 
-            expenseNameLower.includes('đồ uống') || expenseNameLower.includes('nhà hàng')) {
-            category = 'Ăn uống';
-        } else if (expenseNameLower.includes('xe') || expenseNameLower.includes('taxi') || 
-                  expenseNameLower.includes('grab') || expenseNameLower.includes('di chuyển') || 
-                  expenseNameLower.includes('đi lại') || expenseNameLower.includes('xăng')) {
-            category = 'Đi lại';
-        } else if (expenseNameLower.includes('giải trí') || expenseNameLower.includes('phim') || 
-                  expenseNameLower.includes('game') || expenseNameLower.includes('du lịch') || 
-                  expenseNameLower.includes('chơi') || expenseNameLower.includes('tiệc')) {
-            category = 'Giải trí';
-        }
-        
-        console.log(`🔍 Phân loại dự phòng bằng từ khóa cho "${expenseName}": "${category}"`);
-        
-        // Cache the result
-        this.categoryCache[expenseNameLower] = category;
-        return category;
+        // If no match found, return default category
+        return 'Khác';
     }
 
     /**
@@ -608,6 +603,7 @@ export class ReportsUIController extends UIController {
         for (const expense of expenses) {
             const expenseName = expense.name.toLowerCase();
             if (this.categoryCache[expenseName]) {
+                console.log(`📋 Chi tiêu "${expense.name}" đã có trong cache: "${this.categoryCache[expenseName]}"`);
                 categories[expense.id] = this.categoryCache[expenseName];
             } else {
                 // Use fallback initially for quick rendering
@@ -620,17 +616,24 @@ export class ReportsUIController extends UIController {
         // Second pass: asynchronously update with AI categories
         // Use a limited batch to avoid overwhelming the API
         const MAX_BATCH_SIZE = CONFIG.CACHE.MAX_BATCH_SIZE;
-        const toProcess = expenses.filter(e => !this.categoryCache[e.name.toLowerCase()]).slice(0, MAX_BATCH_SIZE);
+        const needCategorization = expenses.filter(e => !this.categoryCache[e.name.toLowerCase()]);
+        console.log(`⚙️ Số chi tiêu cần phân loại bằng AI: ${needCategorization.length}/${expenses.length}`);
         
-        console.log(`🔄 Đang gửi ${toProcess.length} chi tiêu để phân loại bằng AI`);
+        const toProcess = needCategorization.slice(0, MAX_BATCH_SIZE);
         
-        for (const expense of toProcess) {
-            console.log(`🔍 Đang phân loại "${expense.name}" (ID: ${expense.id})`);
-            const aiCategory = await this.categorizeExpenseWithGemini(expense.name);
-            // Update the category with AI result
-            categories[expense.id] = aiCategory;
-            // Update the view if needed
-            this.updateCategoryInCharts(expense.id, aiCategory);
+        if (toProcess.length === 0) {
+            console.log(`ℹ️ Không có chi tiêu nào cần phân loại bằng AI (tất cả đã có trong cache)`);
+        } else {
+            console.log(`🔄 Đang gửi ${toProcess.length} chi tiêu để phân loại bằng AI`);
+            
+            for (const expense of toProcess) {
+                console.log(`🔍 Đang phân loại "${expense.name}" (ID: ${expense.id})`);
+                const aiCategory = await this.categorizeExpenseWithGemini(expense.name);
+                // Update the category with AI result
+                categories[expense.id] = aiCategory;
+                // Update the view if needed
+                this.updateCategoryInCharts(expense.id, aiCategory);
+            }
         }
         
         console.log(`✅ Hoàn thành phân loại hàng loạt với kết quả cuối cùng:`, categories);
@@ -688,6 +691,9 @@ export class ReportsUIController extends UIController {
                 console.log(`📈 Tổng hợp theo phân loại sau khi cập nhật:`, updatedCategoryAmounts);
                 
                 // Re-draw chart with updated data
+                // Store filtered expenses for the new method if called
+                this.filteredExpenses = this.currentGeneralReportData.expenses;
+                // Then call with parameters for the old method
                 this.drawCategoryChart(updatedCategoryAmounts);
             }
         } else {
@@ -734,153 +740,21 @@ export class ReportsUIController extends UIController {
             return;
         }
         
-        // Show loading indicator
-        const loadingIndicator = document.getElementById('category-chart-loading');
-        if (loadingIndicator) loadingIndicator.classList.remove('hidden');
+        console.log('Rendering charts with expenses:', expenses.length);
         
-        // Hide any previous AI status messages
-        const statusElement = document.getElementById('ai-categorization-status');
-        if (statusElement) {
-            statusElement.classList.add('hidden');
-        }
-        
-        // Add IDs to expenses if they don't have them (for tracking in categorization)
-        expenses.forEach((expense, index) => {
-            if (!expense.id) {
-                expense.id = `expense_${index}`;
-            }
-        });
-        
-        console.log('Bắt đầu phân loại chi tiêu với AI...');
-        
-        // Initialize with fallback categorization first for quick display
+        // Initialize with fallback categorization
         const initialCategories = {};
         expenses.forEach(expense => {
             const category = this.categorizeFallback(expense.name);
             initialCategories[expense.id] = category;
+            console.log(`Categorized "${expense.name}" as "${category}"`);
         });
         
         // Aggregate initial categories
         const categoryAmounts = this.aggregateByCategory(expenses, initialCategories);
+        console.log('Category amounts:', categoryAmounts);
         
-        // Draw initial chart
-        this.drawCategoryChart(categoryAmounts, 'Phân loại chi tiêu (tạm thời)');
-        
-        // Then run AI categorization asynchronously and update if needed
-        this.categorizeExpenses(expenses).then(aiCategories => {
-            // Aggregate with AI categories
-            const updatedCategoryAmounts = this.aggregateByCategory(expenses, aiCategories);
-            
-            console.log('Đã hoàn thành phân loại chi tiêu với AI');
-            
-            // Count how many were categorized by AI vs fallback
-            const aiCategorized = expenses.filter(e => {
-                const expenseName = e.name.toLowerCase();
-                return this.categoryCache[expenseName] && 
-                      !this.isFallbackCategory(expenseName, this.categoryCache[expenseName]);
-            }).length;
-            
-            // Update chart if categories changed
-            if (JSON.stringify(categoryAmounts) !== JSON.stringify(updatedCategoryAmounts)) {
-                // Update chart title to show AI categorization
-                this.drawCategoryChart(
-                    updatedCategoryAmounts, 
-                    `Phân loại chi tiêu (AI: ${aiCategorized}/${expenses.length})`
-                );
-                
-                // Update status to show AI categorization count
-                if (statusElement) {
-                    statusElement.textContent = `AI đã phân loại ${aiCategorized} chi tiêu (${Math.round(aiCategorized/expenses.length*100)}%)`;
-                    statusElement.classList.remove('hidden');
-                }
-            }
-            
-            // Hide loading indicator
-            if (loadingIndicator) loadingIndicator.classList.add('hidden');
-        }).catch(error => {
-            console.error('Error with AI categorization:', error);
-            // Hide loading indicator
-            if (loadingIndicator) loadingIndicator.classList.add('hidden');
-            
-            // Show error status
-            if (statusElement) {
-                statusElement.textContent = `Lỗi khi phân loại với AI: ${error.message}`;
-                statusElement.classList.remove('hidden');
-                statusElement.classList.add('bg-red-50', 'text-red-600', 'border-red-100');
-            }
-        });
-        
-        // Continue with time-based chart which doesn't depend on categories
-        this.renderTimeChart(expenses);
-    }
-    
-    /**
-     * Check if a category was determined by fallback logic
-     * @param {string} expenseName - The expense name
-     * @param {string} category - The category
-     * @returns {boolean} - Whether this was from fallback logic
-     */
-    isFallbackCategory(expenseName, category) {
-        // Check if this category would be assigned by the fallback logic
-        const expenseNameLower = expenseName.toLowerCase();
-        
-        if (category === 'Ăn uống' && 
-            (expenseNameLower.includes('ăn') || expenseNameLower.includes('cafe') || 
-             expenseNameLower.includes('cà phê') || expenseNameLower.includes('trà') || 
-             expenseNameLower.includes('đồ uống') || expenseNameLower.includes('nhà hàng'))) {
-            return true;
-        } 
-        
-        if (category === 'Đi lại' && 
-            (expenseNameLower.includes('xe') || expenseNameLower.includes('taxi') || 
-             expenseNameLower.includes('grab') || expenseNameLower.includes('di chuyển') || 
-             expenseNameLower.includes('đi lại') || expenseNameLower.includes('xăng'))) {
-            return true;
-        }
-        
-        if (category === 'Giải trí' && 
-            (expenseNameLower.includes('giải trí') || expenseNameLower.includes('phim') || 
-             expenseNameLower.includes('game') || expenseNameLower.includes('du lịch') || 
-             expenseNameLower.includes('chơi') || expenseNameLower.includes('tiệc'))) {
-            return true;
-        }
-        
-        if (category === 'Khác' && 
-           !expenseNameLower.match(/(ăn|cafe|cà phê|trà|đồ uống|nhà hàng|xe|taxi|grab|di chuyển|đi lại|xăng|giải trí|phim|game|du lịch|chơi|tiệc)/)) {
-            return true;
-        }
-        
-        // If we got here, the category was likely determined by AI
-        return false;
-    }
-    
-    /**
-     * Aggregate expenses by category
-     * @param {Array} expenses - The expenses to aggregate
-     * @param {Object} categoriesMap - Mapping of expense IDs to categories
-     * @returns {Object} - Categories with amounts
-     */
-    aggregateByCategory(expenses, categoriesMap) {
-        const categoryAmounts = {};
-        
-        expenses.forEach(expense => {
-            const category = categoriesMap[expense.id] || 'Khác';
-            
-            if (!categoryAmounts[category]) {
-                categoryAmounts[category] = 0;
-            }
-            categoryAmounts[category] += expense.amount;
-        });
-        
-        return categoryAmounts;
-    }
-    
-    /**
-     * Draw category chart
-     * @param {Object} categoryAmounts - Categories with amounts
-     * @param {string} title - Chart title
-     */
-    drawCategoryChart(categoryAmounts, title = 'Phân loại chi tiêu') {
+        // Draw initial chart directly
         // Chuẩn bị dữ liệu cho biểu đồ phân loại
         const categoryLabels = Object.keys(categoryAmounts);
         const categoryData = categoryLabels.map(cat => categoryAmounts[cat]);
@@ -895,79 +769,61 @@ export class ReportsUIController extends UIController {
             'Khác': '#6366f1'
         };
         
-        const categoryColors = categoryLabels.map(category => 
+        const colors = categoryLabels.map(category => 
             categoryColorMap[category] || '#10b981');
             
         // Tạo biểu đồ phân loại chi tiêu
         const categoryChartEl = document.getElementById('general-report-category-chart');
+        console.log('Chart element found:', categoryChartEl);
+        
         if (categoryChartEl) {
             // Xóa biểu đồ cũ nếu có
             if (this.generalCategoryChart) {
+                console.log('Destroying old chart');
                 this.generalCategoryChart.destroy();
             }
             
-            this.generalCategoryChart = createPieChart(
-                'general-report-category-chart', 
-                categoryData, 
-                categoryLabels, 
-                categoryColors, 
-                title
-            );
-        }
-    }
-    
-    /**
-     * Render time chart separately
-     * @param {Array} expenses - The expenses to render
-     */
-    renderTimeChart(expenses) {
-        // Phân loại theo thời gian - theo tháng
-        const timeData = {};
-        expenses.forEach(expense => {
-            const date = new Date(expense.date);
-            const monthYear = `${date.getMonth() + 1}/${date.getFullYear().toString().substr(2, 2)}`;
+            console.log('Creating new chart with data:', {
+                labels: categoryLabels,
+                data: categoryData,
+                colors: colors
+            });
             
-            if (!timeData[monthYear]) {
-                timeData[monthYear] = 0;
+            try {
+                this.generalCategoryChart = createPieChart(
+                    'general-report-category-chart', 
+                    categoryData, 
+                    categoryLabels, 
+                    colors, 
+                    'Phân loại chi tiêu',
+                    true // Kích hoạt tương tác click
+                );
+                
+                console.log('Chart created successfully:', this.generalCategoryChart);
+                
+                // Thêm sự kiện click cho biểu đồ
+                if (this.generalCategoryChart) {
+                    categoryChartEl.onclick = (evt) => {
+                        const points = this.generalCategoryChart.getElementsAtEventForMode(
+                            evt, 'nearest', { intersect: true }, false
+                        );
+                        
+                        if (points.length) {
+                            const firstPoint = points[0];
+                            const category = categoryLabels[firstPoint.index];
+                            this.filterExpenseTable(category);
+                        }
+                    };
+                }
+            } catch (error) {
+                console.error('Error creating pie chart:', error);
             }
-            timeData[monthYear] += expense.amount;
-        });
-        
-        // Sắp xếp theo thời gian
-        const timeLabels = Object.keys(timeData).sort((a, b) => {
-            const [monthA, yearA] = a.split('/').map(Number);
-            const [monthB, yearB] = b.split('/').map(Number);
-            
-            if (yearA !== yearB) return yearA - yearB;
-            return monthA - monthB;
-        });
-        
-        const expenseData = timeLabels.map(time => timeData[time]);
-        
-        // Tạo biểu đồ chi tiêu theo thời gian
-        const timeChartEl = document.getElementById('general-report-time-chart');
-        if (timeChartEl) {
-            // Xóa biểu đồ cũ nếu có
-            if (this.generalTimeChart) {
-                this.generalTimeChart.destroy();
-            }
-            
-            this.generalTimeChart = createBarChart(
-                'general-report-time-chart',
-                expenseData,
-                timeLabels,
-                'Chi tiêu',
-                '#10b981',
-                'Chi tiêu theo tháng'
-            );
+        } else {
+            console.error('Category chart element not found');
         }
         
-        // Hiện thông báo thống kê (restored from original code)
-        const fromDate = document.getElementById('general-report-from-date').value;
-        const toDate = document.getElementById('general-report-to-date').value;
-        const fromDateObj = new Date(fromDate);
-        const toDateObj = new Date(toDate);
-        console.log(`Đã tạo báo cáo chi tiêu chung từ ${fromDateObj.toLocaleDateString('vi-VN')} đến ${toDateObj.toLocaleDateString('vi-VN')}`);
+        // Continue with time-based chart which doesn't depend on categories
+        this.renderTimeChart(expenses);
     }
     
     /**
@@ -998,65 +854,6 @@ export class ReportsUIController extends UIController {
         if (totalExpenseEl) totalExpenseEl.textContent = `${totalExpense.toLocaleString('vi-VN')} VNĐ`;
         if (avgExpenseEl) avgExpenseEl.textContent = `${avgExpense.toLocaleString('vi-VN')} VNĐ`;
         if (maxExpenseEl) maxExpenseEl.textContent = `${maxExpense.toLocaleString('vi-VN')} VNĐ`;
-    }
-    
-    /**
-     * Render general expense table
-     */
-    renderGeneralExpenseTable(expenses, fromDate, toDate) {
-        const tableBody = document.getElementById('general-report-expenses');
-        if (!tableBody) return;
-        
-        // Nếu không có dữ liệu, hiển thị thông báo
-        if (!expenses || expenses.length === 0) {
-            tableBody.innerHTML = `
-                <tr>
-                    <td colspan="5" class="px-4 py-4 text-sm text-gray-500 text-center italic">
-                        Không có dữ liệu chi tiêu trong khoảng thời gian đã chọn
-                    </td>
-                </tr>
-            `;
-            return;
-        }
-        
-        // Sắp xếp chi tiêu theo ngày, mới nhất lên đầu
-        const sortedExpenses = [...expenses].sort((a, b) => {
-            return new Date(b.date) - new Date(a.date);
-        });
-        
-        let html = '';
-        sortedExpenses.forEach(expense => {
-            const formattedAmount = expense.amount.toLocaleString('vi-VN') + ' VNĐ';
-            const formattedDate = new Date(expense.date).toLocaleDateString('vi-VN');
-            
-            // Display "Group Fund" instead of "__GROUP_FUND__"
-            const payerName = expense.payer === "__GROUP_FUND__" ? "Group Fund" : expense.payer;
-            
-            // Xử lý danh sách người tham gia
-            let participantsStr = '';
-            if (Array.isArray(expense.participants)) {
-                // Replace "__GROUP_FUND__" with "Group Fund" in the participants array if needed
-                participantsStr = expense.participants.map(p => p === "__GROUP_FUND__" ? "Group Fund" : p).join(', ');
-            } else if (typeof expense.participants === 'string') {
-                participantsStr = expense.participants === "__GROUP_FUND__" ? "Group Fund" : expense.participants;
-            } else if (typeof expense.participants === 'object') {
-                // Nếu là object với các keys là tên người tham gia
-                const keys = Object.keys(expense.participants);
-                participantsStr = keys.map(k => k === "__GROUP_FUND__" ? "Group Fund" : k).join(', ');
-            }
-            
-            html += `
-                <tr class="hover:bg-gray-50">
-                    <td class="px-4 py-3 text-sm">${formattedDate}</td>
-                    <td class="px-4 py-3 text-sm font-medium">${expense.name}</td>
-                    <td class="px-4 py-3 text-sm">${payerName}</td>
-                    <td class="px-4 py-3 text-sm font-medium text-emerald-600">${formattedAmount}</td>
-                    <td class="px-4 py-3 text-sm text-gray-600">${participantsStr}</td>
-                </tr>
-            `;
-        });
-        
-        tableBody.innerHTML = html;
     }
     
     /**
@@ -1664,6 +1461,46 @@ export class ReportsUIController extends UIController {
     }
 
     /**
+     * Clear the category cache
+     * @param {string} expenseName - Optional specific expense name to clear from cache (if null, clears all)
+     * @returns {number} - Number of items removed from cache
+     */
+    clearCategoryCache(expenseName = null) {
+        if (!this.categoryCache) {
+            console.log('Cache chưa được khởi tạo');
+            return 0;
+        }
+        
+        let removedCount = 0;
+        
+        // If expense name provided, remove just that item
+        if (expenseName) {
+            const key = expenseName.toLowerCase();
+            if (this.categoryCache[key]) {
+                const oldCategory = this.categoryCache[key];
+                delete this.categoryCache[key];
+                removedCount = 1;
+                console.log(`🗑️ Đã xóa "${expenseName}" (${oldCategory}) khỏi cache`);
+            } else {
+                console.log(`⚠️ Không tìm thấy "${expenseName}" trong cache`);
+            }
+        } 
+        // Otherwise clear all cache
+        else {
+            removedCount = Object.keys(this.categoryCache).length;
+            this.categoryCache = {};
+            console.log(`🗑️ Đã xóa toàn bộ cache (${removedCount} mục)`);
+        }
+        
+        // Save empty cache to localStorage to persist the changes
+        if (CONFIG.CACHE.ENABLE_PERSISTENT_CACHE) {
+            this.saveCategoryCache();
+        }
+        
+        return removedCount;
+    }
+
+    /**
      * Add a test button for Gemini API in development environment
      */
     addTestAPIButton() {
@@ -1672,8 +1509,9 @@ export class ReportsUIController extends UIController {
             const generalReportTab = document.getElementById('general-tab-content');
             if (generalReportTab) {
                 const testButtonContainer = document.createElement('div');
-                testButtonContainer.className = 'mt-4 mb-2 flex justify-end';
+                testButtonContainer.className = 'mt-4 mb-2 flex justify-end space-x-2';
                 
+                // Test API button
                 const testButton = document.createElement('button');
                 testButton.id = 'test-gemini-api-btn';
                 testButton.className = 'px-3 py-1 bg-purple-100 text-purple-700 text-sm rounded border border-purple-300 hover:bg-purple-200 flex items-center';
@@ -1731,7 +1569,52 @@ export class ReportsUIController extends UIController {
                     testButton.disabled = false;
                 });
                 
+                // Clear cache button
+                const clearCacheButton = document.createElement('button');
+                clearCacheButton.id = 'clear-category-cache-btn';
+                clearCacheButton.className = 'px-3 py-1 bg-red-50 text-red-600 text-sm rounded border border-red-200 hover:bg-red-100 flex items-center';
+                clearCacheButton.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Xóa Cache
+                `;
+                
+                clearCacheButton.addEventListener('click', () => {
+                    // Ask for confirmation
+                    if (confirm('Bạn có chắc chắn muốn xóa cache phân loại chi tiêu không?')) {
+                        const removedCount = this.clearCategoryCache();
+                        alert(`Đã xóa ${removedCount} mục khỏi cache phân loại chi tiêu.`);
+                    }
+                });
+                
+                // Specific expense clear button
+                const specificClearButton = document.createElement('button');
+                specificClearButton.id = 'clear-specific-cache-btn';
+                specificClearButton.className = 'px-3 py-1 bg-orange-50 text-orange-600 text-sm rounded border border-orange-200 hover:bg-orange-100 flex items-center';
+                specificClearButton.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Xóa Chi Tiêu Cụ Thể
+                `;
+                
+                specificClearButton.addEventListener('click', () => {
+                    const expenseName = prompt('Nhập tên chi tiêu muốn xóa khỏi cache (ví dụ: "Xem phim"):');
+                    if (expenseName) {
+                        const removedCount = this.clearCategoryCache(expenseName);
+                        if (removedCount > 0) {
+                            alert(`Đã xóa "${expenseName}" khỏi cache phân loại chi tiêu.`);
+                        } else {
+                            alert(`Không tìm thấy "${expenseName}" trong cache.`);
+                        }
+                    }
+                });
+                
+                // Add all buttons to container
                 testButtonContainer.appendChild(testButton);
+                testButtonContainer.appendChild(specificClearButton);
+                testButtonContainer.appendChild(clearCacheButton);
                 
                 // Add before the first chart container
                 const chartContainer = generalReportTab.querySelector('#category-chart-container');
@@ -1741,6 +1624,466 @@ export class ReportsUIController extends UIController {
                     generalReportTab.appendChild(testButtonContainer);
                 }
             }
+        }
+    }
+
+    /**
+     * Initialize category cache - load from localStorage if enabled
+     */
+    initCategoryCache() {
+        // Create an empty cache if not exists
+        this.categoryCache = this.categoryCache || {};
+        
+        // If persistent cache is enabled, try to load from localStorage
+        if (CONFIG.CACHE.ENABLE_PERSISTENT_CACHE) {
+            try {
+                const cachedData = localStorage.getItem(CONFIG.CACHE.CATEGORY_CACHE_KEY);
+                if (cachedData) {
+                    const parsedCache = JSON.parse(cachedData);
+                    
+                    // Check cache timestamp if exists
+                    if (parsedCache._timestamp) {
+                        const cacheAge = (new Date() - new Date(parsedCache._timestamp)) / (1000 * 60 * 60 * 24); // in days
+                        
+                        // If cache is too old, don't use it
+                        if (cacheAge > CONFIG.CACHE.CACHE_MAX_AGE_DAYS) {
+                            console.log(`🕒 Cache quá cũ (${Math.round(cacheAge)} ngày), tạo cache mới`);
+                            this.saveCategoryCache();
+                            return;
+                        }
+                    }
+                    
+                    // Remove timestamp from the object we'll use
+                    const {_timestamp, ...cacheData} = parsedCache;
+                    
+                    // Merge with existing cache (prioritize loaded data)
+                    this.categoryCache = {...this.categoryCache, ...cacheData};
+                    console.log(`📂 Đã tải ${Object.keys(cacheData).length} mục từ cache`);
+                }
+            } catch (error) {
+                console.error('Lỗi khi tải cache từ localStorage:', error);
+                // Continue with empty cache
+            }
+        }
+    }
+
+    /**
+     * Save category cache to localStorage if enabled
+     */
+    saveCategoryCache() {
+        if (!CONFIG.CACHE.ENABLE_PERSISTENT_CACHE) return;
+        
+        try {
+            // Add timestamp to track cache age
+            const cacheWithTimestamp = {
+                ...this.categoryCache,
+                _timestamp: new Date().toISOString()
+            };
+            
+            localStorage.setItem(CONFIG.CACHE.CATEGORY_CACHE_KEY, JSON.stringify(cacheWithTimestamp));
+            console.log(`💾 Đã lưu ${Object.keys(this.categoryCache).length} mục vào cache`);
+        } catch (error) {
+            console.error('Lỗi khi lưu cache vào localStorage:', error);
+        }
+    }
+
+    /**
+     * Add a category to cache and save to localStorage if enabled
+     * @param {string} expenseName - The expense name
+     * @param {string} category - The category
+     */
+    addToCache(expenseName, category) {
+        // Initialize cache if needed
+        this.categoryCache = this.categoryCache || {};
+        
+        // Add to in-memory cache
+        this.categoryCache[expenseName.toLowerCase()] = category;
+        
+        // Save to localStorage if enabled
+        if (CONFIG.CACHE.ENABLE_PERSISTENT_CACHE) {
+            // Use debounced save to avoid too many writes
+            this.debouncedSave();
+        }
+    }
+
+    // Create a debounced version of saveCategoryCache to avoid excessive writes
+    debouncedSave() {
+        // Clear existing timeout if any
+        if (this._saveTimeout) {
+            clearTimeout(this._saveTimeout);
+        }
+        
+        // Set a new timeout to save cache after 2 seconds of inactivity
+        this._saveTimeout = setTimeout(() => {
+            this.saveCategoryCache();
+        }, 2000);
+    }
+
+    /**
+     * Draw chart for expenses by category
+     */
+    drawCategoryChart() {
+        // Kiểm tra xem có dữ liệu chi tiêu không
+        if (!this.filteredExpenses || this.filteredExpenses.length === 0) {
+            const container = document.getElementById('category-chart-container');
+            if (container) {
+                container.innerHTML = '<p class="text-center text-secondary">Không có dữ liệu chi tiêu để hiển thị biểu đồ</p>';
+            } else {
+                // Nếu container không tồn tại, sử dụng general-report-category-chart
+                const chartCanvas = document.getElementById('general-report-category-chart');
+                if (chartCanvas) {
+                    // Clear the existing chart if any
+                    if (this.generalCategoryChart) {
+                        this.generalCategoryChart.destroy();
+                    }
+                    // Thêm thông báo vào phần tử cha của canvas
+                    const parentElement = chartCanvas.parentElement;
+                    if (parentElement) {
+                        // Lưu lại canvas để khôi phục sau này
+                        const canvasHTML = chartCanvas.outerHTML;
+                        parentElement.innerHTML = '<p class="text-center text-secondary">Không có dữ liệu chi tiêu để hiển thị biểu đồ</p>';
+                    }
+                }
+            }
+            return;
+        }
+
+        // Đảm bảo canvas đã được tạo
+        let canvas = document.getElementById('category-chart');
+        let container = document.getElementById('category-chart-container');
+        
+        if (!canvas) {
+            // Thử sử dụng general-report-category-chart nếu category-chart không tồn tại
+            canvas = document.getElementById('general-report-category-chart');
+            container = canvas ? canvas.parentElement : null;
+            
+            if (!canvas && container) {
+                container.innerHTML = '<canvas id="category-chart" height="300"></canvas>';
+                canvas = document.getElementById('category-chart');
+            } else if (!canvas) {
+                console.error('Không tìm thấy phần tử canvas cho biểu đồ danh mục');
+                return;
+            }
+        }
+
+        // Phân tích dữ liệu theo danh mục
+        const categories = {};
+        for (const expense of this.filteredExpenses) {
+            const category = expense.category || 'Không phân loại';
+            if (!categories[category]) {
+                categories[category] = 0;
+            }
+            categories[category] += expense.amount;
+        }
+
+        // Chuẩn bị dữ liệu cho biểu đồ
+        const labels = Object.keys(categories);
+        const data = Object.values(categories);
+        
+        // Tạo mảng màu dựa trên số lượng danh mục
+        // Predefined colors for consistent categories
+        const categoryColorMap = {
+            'Ăn uống': '#16a34a',
+            'Đi lại': '#0ea5e9',
+            'Giải trí': '#8b5cf6',
+            'Mua sắm': '#f59e0b',
+            'Tiện ích': '#ef4444',
+            'Khác': '#6366f1'
+        };
+        
+        const colors = labels.map(category => 
+            categoryColorMap[category] || '#10b981');
+
+        // Lưu trữ dữ liệu danh mục để sử dụng cho việc lọc
+        this.categoryData = {
+            labels,
+            data,
+            colors
+        };
+
+        // Xác định ID của canvas để sử dụng
+        const canvasId = canvas.id; // Sử dụng ID của canvas đã tìm thấy
+        
+        // Tạo biểu đồ với khả năng tương tác khi nhấp chuột
+        if (this.categoryChart) {
+            this.categoryChart.destroy();
+        }
+        
+        this.categoryChart = createPieChart(
+            canvasId,
+            data,
+            labels,
+            colors,
+            'Phân loại chi tiêu',
+            true // Kích hoạt tương tác khi nhấp chuột
+        );
+
+        // Thêm xử lý sự kiện click vào biểu đồ
+        canvas.onclick = (event) => {
+            const points = this.categoryChart.getElementsAtEventForMode(event, 'nearest', { intersect: true }, false);
+            if (points.length) {
+                const clickedIndex = points[0].index;
+                const label = this.categoryChart.data.labels[clickedIndex];
+                this.filterExpenseTable(label);
+            }
+        };
+    }
+
+    /**
+     * Filter expense table by category
+     * @param {string|null} category - Category to filter by, or null to show all
+     */
+    filterExpenseTable(category) {
+        if (!this.currentGeneralReportData || !this.currentGeneralReportData.expenses) {
+            return;
+        }
+        
+        const expenses = this.currentGeneralReportData.expenses;
+        
+        // If category is null, show all expenses
+        if (category === null || category === 'all') {
+            this.renderGeneralExpenseTable(expenses);
+            return;
+        }
+        
+        // Filter expenses by the selected category
+        const filteredExpenses = expenses.filter(expense => {
+            // Get the category for this expense
+            const expenseCategory = this.categorizeFallback(expense.name);
+            return expenseCategory === category;
+        });
+        
+        // Render the filtered expenses with a filter message
+        this.renderGeneralExpenseTable(filteredExpenses, `Đang lọc: ${category}`);
+    }
+
+    /**
+     * Render bảng báo cáo chi tiêu chung
+     * @param {Array} expenses - Dữ liệu chi tiêu để hiển thị
+     * @param {string|null} filterMessage - Thông báo lọc để hiển thị (nếu có)
+     */
+    renderGeneralExpenseTable(expenses, filterMessage = null) {
+        const tableBody = document.getElementById('general-report-expenses');
+        const tableCaption = document.getElementById('general-expense-table-caption');
+        
+        if (!tableBody) {
+            console.error('Không tìm thấy phần tử bảng chi tiêu với ID "general-report-expenses"');
+            return;
+        }
+        
+        console.log(`Rendering expense table with ${expenses ? expenses.length : 0} expenses`);
+        
+        // Xử lý khi không có chi tiêu
+        if (!expenses || expenses.length === 0) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="px-4 py-4 text-sm text-gray-500 text-center italic">Không có dữ liệu chi tiêu trong khoảng thời gian này</td>
+                </tr>
+            `;
+            if (tableCaption) {
+                tableCaption.innerHTML = filterMessage || '';
+            }
+            return;
+        }
+        
+        // Sắp xếp chi tiêu theo ngày, mới nhất lên đầu
+        const sortedExpenses = [...expenses].sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        // Chuẩn bị dữ liệu HTML cho bảng
+        let html = '';
+        
+        sortedExpenses.forEach((expense, index) => {
+            // Định dạng ngày
+            const expenseDate = new Date(expense.date);
+            const formattedDate = `${expenseDate.getDate()}/${expenseDate.getMonth() + 1}/${expenseDate.getFullYear()}`;
+            
+            // Định dạng số tiền
+            const formattedAmount = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(expense.amount);
+            
+            // Tạo danh sách người tham gia
+            let participantsHtml = '';
+            if (expense.participants && expense.participants.length > 0) {
+                participantsHtml = expense.participants
+                    .map(participant => {
+                        // Kiểm tra nếu participant có trường name
+                        return participant.name || participant;
+                    })
+                    .join(', ');
+            }
+            
+            // Xác định màu nền dựa trên index (hàng chẵn/lẻ)
+            const rowClass = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+            
+            // Tạo category badge nếu có category
+            const category = expense.category || this.categorizeFallback(expense.name);
+            const categoryClass = this.getCategoryColorClass(category);
+            
+            // Xây dựng HTML cho hàng với nhiều styling hơn
+            html += `
+                <tr class="${rowClass} hover:bg-gray-100 transition duration-150">
+                    <td class="px-4 py-3 text-sm whitespace-nowrap font-medium text-gray-700">${formattedDate}</td>
+                    <td class="px-4 py-3">
+                        <div class="flex flex-col">
+                            <span class="text-sm font-medium text-gray-800">${expense.name || 'Không có tên'}</span>
+                            ${category ? `<span class="mt-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${categoryClass}">${category}</span>` : ''}
+                        </div>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600">${expense.payer || 'Không xác định'}</td>
+                    <td class="px-4 py-3 text-sm font-medium text-emerald-600 whitespace-nowrap">${formattedAmount}</td>
+                    <td class="px-4 py-3 text-xs text-gray-500 max-w-xs truncate">${participantsHtml || 'Không có người tham gia'}</td>
+                </tr>
+            `;
+        });
+        
+        tableBody.innerHTML = html;
+        console.log('Table HTML rendered:', html.slice(0, 100) + '...');
+        
+        // Cập nhật caption nếu có thông báo lọc
+        if (tableCaption) {
+            tableCaption.innerHTML = filterMessage || '';
+        }
+    }
+
+    /**
+     * Helper function to get the color class for a category
+     * @param {string} category - The category name
+     * @returns {string} - The appropriate Tailwind color class
+     */
+    getCategoryColorClass(category) {
+        const categoryClasses = {
+            'Ăn uống': 'bg-green-100 text-green-800',
+            'Đi lại': 'bg-blue-100 text-blue-800',
+            'Giải trí': 'bg-purple-100 text-purple-800',
+            'Mua sắm': 'bg-amber-100 text-amber-800',
+            'Tiện ích': 'bg-red-100 text-red-800',
+            'Khác': 'bg-indigo-100 text-indigo-800'
+        };
+        
+        return categoryClasses[category] || 'bg-gray-100 text-gray-800';
+    }
+
+    /**
+     * Generate colors for categories
+     * @param {number} count - Number of colors needed
+     * @returns {Array} - Array of color hex codes
+     */
+    generateCategoryColors(count) {
+        // Predefined colors for categories
+        const baseColors = [
+            '#16a34a', // Green
+            '#0ea5e9', // Blue
+            '#8b5cf6', // Purple
+            '#f59e0b', // Orange
+            '#ef4444', // Red
+            '#6366f1', // Indigo
+            '#ec4899', // Pink
+            '#14b8a6', // Teal
+            '#f97316', // Orange/Red
+            '#84cc16', // Lime
+            '#a855f7', // Purple
+            '#06b6d4'  // Cyan
+        ];
+        
+        // If we have enough base colors, return a slice
+        if (count <= baseColors.length) {
+            return baseColors.slice(0, count);
+        }
+        
+        // Otherwise, reuse colors with slight variations
+        const colors = [...baseColors];
+        
+        // Generate additional colors by adjusting lightness
+        while (colors.length < count) {
+            const index = colors.length % baseColors.length;
+            const baseColor = baseColors[index];
+            
+            // Convert hex to HSL, adjust lightness, convert back to hex
+            const r = parseInt(baseColor.slice(1, 3), 16);
+            const g = parseInt(baseColor.slice(3, 5), 16);
+            const b = parseInt(baseColor.slice(5, 7), 16);
+            
+            // Adjust RGB values slightly
+            const newR = Math.min(255, Math.max(0, r + (colors.length * 20) % 40 - 20));
+            const newG = Math.min(255, Math.max(0, g + (colors.length * 15) % 30 - 15));
+            const newB = Math.min(255, Math.max(0, b + (colors.length * 25) % 50 - 25));
+            
+            // Convert back to hex
+            const newColor = '#' + 
+                newR.toString(16).padStart(2, '0') + 
+                newG.toString(16).padStart(2, '0') + 
+                newB.toString(16).padStart(2, '0');
+            
+            colors.push(newColor);
+        }
+        
+        return colors;
+    }
+
+    /**
+     * Aggregate expenses by category
+     * @param {Array} expenses - The expenses to aggregate
+     * @param {Object} categoriesMap - Mapping of expense IDs to categories
+     * @returns {Object} - Categories with amounts
+     */
+    aggregateByCategory(expenses, categoriesMap) {
+        const categoryAmounts = {};
+        
+        expenses.forEach(expense => {
+            const category = categoriesMap[expense.id] || 'Khác';
+            
+            if (!categoryAmounts[category]) {
+                categoryAmounts[category] = 0;
+            }
+            categoryAmounts[category] += expense.amount;
+        });
+        
+        return categoryAmounts;
+    }
+    
+    /**
+     * Render time chart separately
+     * @param {Array} expenses - The expenses to render
+     */
+    renderTimeChart(expenses) {
+        // Phân loại theo thời gian - theo tháng
+        const timeData = {};
+        expenses.forEach(expense => {
+            const date = new Date(expense.date);
+            const monthYear = `${date.getMonth() + 1}/${date.getFullYear().toString().substr(2, 2)}`;
+            
+            if (!timeData[monthYear]) {
+                timeData[monthYear] = 0;
+            }
+            timeData[monthYear] += expense.amount;
+        });
+        
+        // Sắp xếp theo thời gian
+        const timeLabels = Object.keys(timeData).sort((a, b) => {
+            const [monthA, yearA] = a.split('/').map(Number);
+            const [monthB, yearB] = b.split('/').map(Number);
+            
+            if (yearA !== yearB) return yearA - yearB;
+            return monthA - monthB;
+        });
+        
+        const expenseData = timeLabels.map(time => timeData[time]);
+        
+        // Tạo biểu đồ chi tiêu theo thời gian
+        const timeChartEl = document.getElementById('general-report-time-chart');
+        if (timeChartEl) {
+            // Xóa biểu đồ cũ nếu có
+            if (this.generalTimeChart) {
+                this.generalTimeChart.destroy();
+            }
+            
+            this.generalTimeChart = createBarChart(
+                'general-report-time-chart',
+                expenseData,
+                timeLabels,
+                'Chi tiêu',
+                '#10b981',
+                'Chi tiêu theo tháng'
+            );
         }
     }
 }

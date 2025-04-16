@@ -174,9 +174,20 @@ export class ExpenseUIController extends UIController {
         
         if (this.quickDepositBtn) {
             this.quickDepositBtn.addEventListener('click', () => {
-                // Assign default member for quick deposit - can be adjusted as needed
-                const defaultMember = this.app.memberManager.getAllMembers()[0] || 'Toàn';
-                this.showQrCode('', defaultMember, 1000000);
+                // Get the currently logged in user
+                const currentUser = this.app.getCurrentUser();
+                
+                // Default to admin account if no user is logged in
+                const sender = currentUser || '';
+                
+                // Use Toan.LV as the fund recipient
+                const receiver = 'Toan.LV';
+                
+                // Standard amount for fund contribution
+                const amount = 1000000;
+                
+                // Call showQrCode with custom description for CafeThu6 fund
+                this.showQrCode(sender, receiver, amount, sender + ' dong quy CafeThu6');
             });
         }
         
@@ -1346,6 +1357,20 @@ export class ExpenseUIController extends UIController {
             return;
         }
         
+        // Hiển thị thông báo khi có trạng thái bất thường
+        if (results.abnormalState) {
+            let message = '';
+            if (results.allNegative) {
+                message = '<li class="text-amber-600 italic">Tình trạng bất thường: Tất cả thành viên đều có số dư âm. ' +
+                          'Điều này có thể do dữ liệu chi tiêu không đầy đủ hoặc thành viên đã chi tiêu không có trong danh sách thành viên hiện tại.</li>';
+            } else if (results.allPositive) {
+                message = '<li class="text-amber-600 italic">Tình trạng bất thường: Tất cả thành viên đều có số dư dương. ' +
+                          'Điều này có thể do dữ liệu chi tiêu không đầy đủ.</li>';
+            }
+            transactionsEl.innerHTML = message;
+            return;
+        }
+        
         if (results.transactions.length === 0) {
             transactionsEl.innerHTML = '<li class="text-gray-500 italic">Không có giao dịch cần thực hiện.</li>';
             return;
@@ -1363,7 +1388,7 @@ export class ExpenseUIController extends UIController {
             qrBtn.dataset.amount = transaction.amount;
             qrBtn.innerHTML = '<i data-lucide="qr-code" class="w-3 h-3 mr-1"></i>QR';
             qrBtn.addEventListener('click', () => {
-                this.showQrCode(transaction.from, transaction.to, transaction.amount);
+                this.showQrCode(transaction.from, transaction.to, transaction.amount, 'Thanh toan chi phi CafeThu6');
             });
             
             // Check if QR code is available for this transaction
@@ -1966,9 +1991,9 @@ export class ExpenseUIController extends UIController {
         item.setAttribute('data-id', expense.id);
         
         // Enhanced debugging for location data
-        console.log('Expense:', expense.id, 'Name:', expense.name);
-        console.log('Location data type:', typeof expense.location);
-        console.log('Location value:', expense.location);
+        // console.log('Expense:', expense.id, 'Name:', expense.name);
+        // console.log('Location data type:', typeof expense.location);
+        // console.log('Location value:', expense.location);
         
         const equalSplit = expense.equalSplit;
         
@@ -2006,21 +2031,21 @@ export class ExpenseUIController extends UIController {
             if (typeof expense.location === 'string') {
                 try {
                     location = JSON.parse(expense.location);
-                    console.log(`DEBUG [${expense.id}]: Successfully parsed location from string:`, location);
+                    // console.log(`DEBUG [${expense.id}]: Successfully parsed location from string:`, location);
                 } catch (e) {
-                    console.error(`DEBUG [${expense.id}]: Failed to parse location string:`, e, 'Raw string:', expense.location);
+                    // console.error(`DEBUG [${expense.id}]: Failed to parse location string:`, e, 'Raw string:', expense.location);
                     location = null; // Parsing failed
                 }
             } else if (typeof expense.location === 'object') {
                 location = expense.location; // Assume it's already an object
-                console.log(`DEBUG [${expense.id}]: Location is already an object:`, location);
+                // console.log(`DEBUG [${expense.id}]: Location is already an object:`, location);
             }
         } else {
-             console.log(`DEBUG [${expense.id}]: No location data found (expense.location is falsy).`);
+            //  console.log(`DEBUG [${expense.id}]: No location data found (expense.location is falsy).`);
         }
 
         // Final check for valid location object structure before determining 'hasLocation'
-        console.log(`DEBUG [${expense.id}]: Evaluating location object for hasLocation check:`, location);
+        // console.log(`DEBUG [${expense.id}]: Evaluating location object for hasLocation check:`, location);
         const hasLocation = location &&
                          typeof location === 'object' && // Ensure it's an object
                          'lat' in location &&
@@ -2028,7 +2053,7 @@ export class ExpenseUIController extends UIController {
                          location.lat !== null && location.lat !== undefined &&
                          location.lng !== null && location.lng !== undefined;
 
-        console.log(`DEBUG [${expense.id}]: Final 'hasLocation' result:`, hasLocation);
+        // console.log(`DEBUG [${expense.id}]: Final 'hasLocation' result:`, hasLocation);
         // --- End Simplified Location Handling ---
         
         // Add location badge to expense header if location exists - thu gọn

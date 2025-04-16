@@ -48,8 +48,9 @@ export const hideQrModal = () => {
  * @param {number|string} amount - The amount to transfer
  * @param {Object} bankAccounts - The bank account mapping
  * @param {string} bankCode - The bank code (e.g., 'BIDV')
+ * @param {string} customDescription - Optional custom description for the transfer
  */
-export const displayQrCode = (debtor, creditor, amount, bankAccounts, bankCode = 'BIDV') => {
+export const displayQrCode = (debtor, creditor, amount, bankAccounts, bankCode = 'BIDV', customDescription = '') => {
     // Parse amount to ensure it's a number
     const amountValue = parseFloat(amount);
     
@@ -62,7 +63,8 @@ export const displayQrCode = (debtor, creditor, amount, bankAccounts, bankCode =
     
     // Generate QR Code using the provided endpoint
     if (accountNumber) {
-        const description = `${debtor} chuyen tien cho ${creditor}`;
+        // Use custom description if provided, otherwise use default
+        const description = customDescription || `${debtor} chuyen tien cho ${creditor}`;
         const qrUrl = `https://qr.sepay.vn/img?acc=${accountNumber}&bank=${bankCode}&amount=${amountValue}&des=${encodeURIComponent(description)}&template=compact&download=false`;
         qrCodeImage.src = qrUrl;
     } else {

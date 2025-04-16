@@ -106,9 +106,10 @@ export class UIController {
      * @param {string} debtor - The person who needs to pay
      * @param {string} creditor - The person who should receive payment
      * @param {number} amount - The amount to transfer
+     * @param {string} customDescription - Optional custom description for the transfer
      */
-    showQrCode(debtor, creditor, amount) {
+    showQrCode(debtor, creditor, amount, customDescription = '') {
         const bankAccounts = this.app.memberManager.getAllBankAccounts();
-        displayQrCode(debtor, creditor, amount, bankAccounts);
+        displayQrCode(debtor, creditor, amount, bankAccounts, 'BIDV', customDescription);
     }
 } 

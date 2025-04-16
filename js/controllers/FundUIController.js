@@ -36,6 +36,11 @@ export class FundUIController extends UIController {
         this.transactionsPerPage = 6; // Show 6 transactions per page
         this.currentTransactionPage = 1;
         
+        // Chart rendering throttling
+        this.lastChartRenderTime = 0;
+        this.chartRenderThrottleMs = 500; // Minimum time between chart renders
+        this.pendingChartRender = false;
+        
         // Initialize UI
         this.initUI();
     }
@@ -232,9 +237,35 @@ export class FundUIController extends UIController {
         // Render member balances
         this.renderMemberBalances();
         
-        // Update the charts
-        this.updateFundPieChart();
-        this.updateIncomeExpenseChart();
+        // Throttle chart rendering to prevent excessive redraws
+        const now = Date.now();
+        const timeSinceLastRender = now - this.lastChartRenderTime;
+        
+        if (timeSinceLastRender >= this.chartRenderThrottleMs) {
+            // It's been long enough since the last render, update charts now
+            this.lastChartRenderTime = now;
+            this.pendingChartRender = false;
+            
+            // Update the charts
+            this.updateFundPieChart();
+            this.updateIncomeExpenseChart();
+        } else if (!this.pendingChartRender) {
+            // Schedule a render for later
+            this.pendingChartRender = true;
+            setTimeout(() => {
+                // Only proceed if no other renders have happened in the meantime
+                if (this.pendingChartRender) {
+                    this.lastChartRenderTime = Date.now();
+                    this.pendingChartRender = false;
+                    
+                    // Update the charts
+                    this.updateFundPieChart();
+                    this.updateIncomeExpenseChart();
+                }
+            }, this.chartRenderThrottleMs - timeSinceLastRender);
+        }
+        // If pendingChartRender is true but we didn't schedule a new one,
+        // that means there's already one scheduled, so we do nothing
     }
     
     /**
@@ -406,22 +437,17 @@ export class FundUIController extends UIController {
             submitBtn.textContent = 'Đang xử lý...';
             
             // Add deposit
-            await this.app.fundManager.addDeposit(member, amount, date, note);
+            const transaction = await this.app.fundManager.addDeposit(member, amount, date, note);
             
-            // Làm mới dữ liệu với cơ chế hoàn chỉnh
-            try {
-                // Refresh dữ liệu
-                await this.app.fundManager.loadData();
-                
-                // Cập nhật giao diện quỹ nhóm
-                this.renderFundStatus();
-                this.renderFundTransactions();
-                
-                // Cập nhật số dư quỹ trên tab chi tiêu và thành viên
-                this.updateAllFundBalanceDisplays();
-            } catch (refreshError) {
-                console.error('Lỗi khi làm mới dữ liệu:', refreshError);
-            }
+            // Các bước sau này đã được xử lý trong hàm addDeposit
+            // KHÔNG cần tải lại dữ liệu, vì điều đó sẽ gây trùng lặp!
+            
+            // Cập nhật giao diện trực tiếp mà không cần tải lại dữ liệu
+            this.renderFundStatus();
+            this.renderFundTransactions();
+            
+            // Cập nhật số dư quỹ trên tab chi tiêu và thành viên
+            this.updateAllFundBalanceDisplays();
             
             // Reset form
             this.depositForm.reset();
@@ -484,10 +510,13 @@ export class FundUIController extends UIController {
         }
         this.groupFundTransactionsLogDiv.innerHTML = '';
         
-        // Sort transactions by date, most recent first
-        const sortedTransactions = [...transactions].sort((a, b) => 
-            new Date(b.date) - new Date(a.date)
-        );
+        // Sort transactions by created_at (ghi chú), most recent first
+        const sortedTransactions = [...transactions].sort((a, b) => {
+            // Sử dụng created_at nếu có, nếu không sẽ dùng date
+            const dateA = a.created_at ? new Date(a.created_at) : new Date(a.date);
+            const dateB = b.created_at ? new Date(b.created_at) : new Date(b.date);
+            return dateB - dateA; // Giảm dần - mới nhất hiển thị trước
+        });
         
         // Pagination setup
         const totalTransactions = sortedTransactions.length;
@@ -523,7 +552,20 @@ export class FundUIController extends UIController {
             
             // Format date from YYYY-MM-DD to DD/MM/YYYY
             const dateParts = transaction.date.split('-');
-            date.textContent = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+            const formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+            
+            // Thêm hiển thị thời gian tạo giao dịch nếu có
+            if (transaction.created_at) {
+                const createdDate = new Date(transaction.created_at);
+                // Chỉ hiển thị giờ:phút
+                const createdTime = createdDate.toLocaleTimeString('vi-VN', { 
+                    hour: '2-digit', 
+                    minute: '2-digit'
+                });
+                date.textContent = `${formattedDate} (${createdTime})`;
+            } else {
+                date.textContent = formattedDate;
+            }
             
             const amount = document.createElement('span');
             amount.className = transaction.isDeposit() ? 'ml-2 text-green-600 font-medium' : 'ml-2 text-red-600 font-medium';
@@ -635,6 +677,31 @@ export class FundUIController extends UIController {
         const fundPieChartCanvas = document.getElementById('fund-pie-chart');
         if (!fundPieChartCanvas) return;
         
+        // Force destroy any existing Chart instance on this canvas
+        try {
+            // Clear any existing chart instances from Chart.js registry
+            const existingChartInstance = Chart.getChart(fundPieChartCanvas);
+            if (existingChartInstance) {
+                existingChartInstance.destroy();
+            }
+            
+            // Also destroy our stored reference if it exists
+            if (this.fundPieChart) {
+                this.fundPieChart.destroy();
+                this.fundPieChart = null;
+            }
+        } catch (error) {
+            console.warn('Error cleaning up existing chart:', error);
+            // Continue with chart creation even if cleanup failed
+        }
+        
+        // Additional safety - clear canvas by resetting its inner HTML
+        fundPieChartCanvas.getContext('2d').clearRect(
+            0, 0, 
+            fundPieChartCanvas.width, 
+            fundPieChartCanvas.height
+        );
+        
         const memberBalances = this.app.fundManager.getMemberBalances();
         const members = this.app.memberManager.getAllMembers();
         
@@ -666,45 +733,56 @@ export class FundUIController extends UIController {
             data.push(1);
         }
         
-        // If chart exists, destroy it
-        if (this.fundPieChart) {
-            this.fundPieChart.destroy();
-        }
-        
-        // Create new chart
-        this.fundPieChart = new Chart(fundPieChartCanvas, {
-            type: 'pie',
-            data: {
-                labels: labels,
-                datasets: [{
-                    data: data,
-                    backgroundColor: backgroundColors.slice(0, labels.length),
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'right',
-                        labels: {
-                            boxWidth: 15,
-                            font: {
-                                size: 12
-                            }
-                        }
+        // Wrap chart creation in a try-catch to handle potential errors
+        try {
+            // Create new chart with a small delay to ensure DOM is ready and cleanup is complete
+            setTimeout(() => {
+                // Double-check if canvas still exists before creating chart
+                if (!document.getElementById('fund-pie-chart')) return;
+                
+                // Check once more if there's an existing chart instance
+                const doubleCheckChart = Chart.getChart(fundPieChartCanvas);
+                if (doubleCheckChart) {
+                    doubleCheckChart.destroy();
+                }
+                
+                this.fundPieChart = new Chart(fundPieChartCanvas, {
+                    type: 'pie',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: backgroundColors.slice(0, labels.length),
+                            borderWidth: 1
+                        }]
                     },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                return ` ${context.label}: ${formatCurrency(context.raw)}`;
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: {
+                                    boxWidth: 15,
+                                    font: {
+                                        size: 12
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return ` ${context.label}: ${formatCurrency(context.raw)}`;
+                                    }
+                                }
                             }
                         }
                     }
-                }
-            }
-        });
+                });
+            }, 50); // Slightly longer delay to ensure cleanup is complete
+        } catch (error) {
+            console.error('Error creating fund pie chart:', error);
+        }
     }
     
     /**
@@ -713,6 +791,31 @@ export class FundUIController extends UIController {
     updateIncomeExpenseChart() {
         const incomeExpenseChartCanvas = document.getElementById('income-expense-chart');
         if (!incomeExpenseChartCanvas) return;
+        
+        // Force destroy any existing Chart instance on this canvas
+        try {
+            // Clear any existing chart instances from Chart.js registry
+            const existingChartInstance = Chart.getChart(incomeExpenseChartCanvas);
+            if (existingChartInstance) {
+                existingChartInstance.destroy();
+            }
+            
+            // Also destroy our stored reference if it exists
+            if (this.incomeExpenseChart) {
+                this.incomeExpenseChart.destroy();
+                this.incomeExpenseChart = null;
+            }
+        } catch (error) {
+            console.warn('Error cleaning up existing chart:', error);
+            // Continue with chart creation even if cleanup failed
+        }
+        
+        // Additional safety - clear canvas by resetting its inner HTML
+        incomeExpenseChartCanvas.getContext('2d').clearRect(
+            0, 0, 
+            incomeExpenseChartCanvas.width, 
+            incomeExpenseChartCanvas.height
+        );
         
         const transactions = this.app.fundManager.getAllTransactions();
         
@@ -757,65 +860,76 @@ export class FundUIController extends UIController {
             }
         });
         
-        // If chart exists, destroy it
-        if (this.incomeExpenseChart) {
-            this.incomeExpenseChart.destroy();
-        }
-        
-        // Create new chart
-        this.incomeExpenseChart = new Chart(incomeExpenseChartCanvas, {
-            type: 'bar',
-            data: {
-                labels: months,
-                datasets: [
-                    {
-                        label: 'Thu',
-                        data: incomeData,
-                        backgroundColor: 'rgba(75, 192, 192, 0.7)',
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        borderWidth: 1
-                    },
-                    {
-                        label: 'Chi',
-                        data: expenseData,
-                        backgroundColor: 'rgba(255, 99, 132, 0.7)',
-                        borderColor: 'rgba(255, 99, 132, 1)',
-                        borderWidth: 1
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            callback: function(value) {
-                                if (value >= 1000000) {
-                                    return value / 1000000 + 'M';
-                                } else if (value >= 1000) {
-                                    return value / 1000 + 'K';
-                                }
-                                return value;
-                            }
-                        }
-                    }
-                },
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                return `${context.dataset.label}: ${formatCurrency(context.raw)}`;
-                            }
-                        }
-                    }
+        // Wrap chart creation in a try-catch to handle potential errors
+        try {
+            // Create new chart with a small delay to ensure DOM is ready and cleanup is complete
+            setTimeout(() => {
+                // Double-check if canvas still exists before creating chart
+                if (!document.getElementById('income-expense-chart')) return;
+                
+                // Check once more if there's an existing chart instance
+                const doubleCheckChart = Chart.getChart(incomeExpenseChartCanvas);
+                if (doubleCheckChart) {
+                    doubleCheckChart.destroy();
                 }
-            }
-        });
+                
+                this.incomeExpenseChart = new Chart(incomeExpenseChartCanvas, {
+                    type: 'bar',
+                    data: {
+                        labels: months,
+                        datasets: [
+                            {
+                                label: 'Thu',
+                                data: incomeData,
+                                backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                borderWidth: 1
+                            },
+                            {
+                                label: 'Chi',
+                                data: expenseData,
+                                backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                                borderColor: 'rgba(255, 99, 132, 1)',
+                                borderWidth: 1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        if (value >= 1000000) {
+                                            return value / 1000000 + 'M';
+                                        } else if (value >= 1000) {
+                                            return value / 1000 + 'K';
+                                        }
+                                        return value;
+                                    }
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `${context.dataset.label}: ${formatCurrency(context.raw)}`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }, 50); // Slightly longer delay to ensure cleanup is complete
+        } catch (error) {
+            console.error('Error creating income-expense chart:', error);
+        }
     }
     
     /**

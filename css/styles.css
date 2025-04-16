@@ -148,6 +148,10 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
     --tab-color: #8b5cf6; /* púrpura */
     --tab-color-rgb: 139, 92, 246;
 }
+.tab-button[data-tab="reports"] {
+    --tab-color: #f59e0b; /* amber */
+    --tab-color-rgb: 245, 158, 11;
+}
 .tab-button:hover {
     background-color: rgba(var(--tab-color-rgb, 34, 197, 94), 0.1);
     color: var(--tab-color, #16a34a);
@@ -332,7 +336,8 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 /* Mejora de las cajas de encabezado en cada tab */
 #tab-content-expenses .bg-green-100,
 #tab-content-group-fund .bg-blue-100,
-#tab-content-members .bg-purple-100 {
+#tab-content-members .bg-purple-100,
+#tab-content-reports .bg-amber-100 {
     border-left: 4px solid;
     transition: all 0.3s ease;
     transform: translateY(0);
@@ -351,9 +356,14 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
     border-color: #8b5cf6;
 }
 
+#tab-content-reports .bg-amber-100 {
+    border-color: #f59e0b;
+}
+
 .tab-content.active .bg-green-100,
 .tab-content.active .bg-blue-100,
-.tab-content.active .bg-purple-100 {
+.tab-content.active .bg-purple-100,
+.tab-content.active .bg-amber-100 {
     animation: slideIn 0.5s ease;
 }
 

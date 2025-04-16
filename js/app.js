@@ -9,6 +9,7 @@ import { MemberManager } from './controllers/MemberManager.js';
 import { ExpenseUIController } from './controllers/ExpenseUIController.js';
 import { FundUIController } from './controllers/FundUIController.js';
 import { MemberUIController } from './controllers/MemberUIController.js';
+import { ReportsUIController } from './controllers/ReportsUIController.js';
 import { initializeStorage, clearAllData, supabase } from './utils/storage.js';
 import { showMessage } from './utils/helpers.js';
 import { initAuth, isLoggedIn, getLoggedInUser, isAdmin } from './utils/auth.js';
@@ -61,6 +62,7 @@ class App {
             this.expenseUI = new ExpenseUIController(this);
             this.fundUI = new FundUIController(this);
             this.memberUI = new MemberUIController(this);
+            this.reportsUI = new ReportsUIController(this);
             
             // Initialize Lucide icons
             lucide.createIcons();
@@ -105,6 +107,7 @@ class App {
             this.renderExpenses();
             this.renderGroupFund();
             this.renderMembers();
+            this.renderReports();
             
             // Calculate and render expense results
             const members = this.memberManager.getAllMembers();
@@ -139,6 +142,17 @@ class App {
      */
     renderMembers() {
         this.memberUI.renderMembers();
+    }
+    
+    /**
+     * Render reports UI
+     */
+    renderReports() {
+        // If we're on the reports tab, initialize the reports UI
+        const reportsTab = document.querySelector('.tab-button[data-tab="reports"]');
+        if (reportsTab && reportsTab.classList.contains('active')) {
+            this.reportsUI.populateMemberSelect();
+        }
     }
     
     /**

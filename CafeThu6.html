@@ -59,6 +59,9 @@
                     <button class="tab-button px-6 py-3" data-tab="members">
                         <i data-lucide="users" class="mr-1"></i> Thành viên
                     </button>
+                    <button class="tab-button px-6 py-3" data-tab="reports">
+                        <i data-lucide="bar-chart" class="mr-1"></i> Báo cáo
+                    </button>
                 </div>
                 
                 <div class="flex items-center space-x-2">
@@ -426,6 +429,315 @@
                             <div id="members-list" class="space-y-3">
                                 <!-- Member list will be populated here -->
                                 <p id="no-members-message" class="text-gray-500 italic text-center py-4">Chưa có thành viên nào. Hãy thêm thành viên để bắt đầu.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div id="tab-content-reports" class="tab-content">
+                <section id="reports-section" class="bg-white p-6 rounded-lg shadow-md mb-8">
+                    <h2 class="text-2xl font-semibold mb-4 text-amber-600 flex items-center">
+                        <i data-lucide="bar-chart" class="w-6 h-6 mr-2"></i>
+                        Báo cáo
+                    </h2>
+                    
+                    <div class="mb-6">
+                        <p class="text-sm text-gray-600 mb-4">Xem các báo cáo chi tiết về quỹ nhóm, chi tiêu chung và chi tiêu của các thành viên.</p>
+                        
+                        <!-- Report Type Tabs -->
+                        <div class="tabs mb-6">
+                            <button class="tab-btn active" data-tab="fund-report">Báo cáo giao dịch quỹ</button>
+                            <button class="tab-btn" data-tab="general-expense-report">Báo cáo chi tiêu chung</button>
+                            <button class="tab-btn" data-tab="member-expense-report">Báo cáo chi tiêu thành viên</button>
+                        </div>
+                        
+                        <!-- Fund Transaction Report -->
+                        <div id="fund-report-content" class="tab-pane active">
+                            <div class="bg-gradient-to-r from-amber-100 to-amber-200 p-4 rounded-lg shadow-sm mb-6 flex items-center">
+                                <div class="bg-amber-500 text-white p-2 rounded-full mr-3">
+                                    <i data-lucide="piggy-bank" class="w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-amber-800">Báo cáo giao dịch quỹ nhóm</p>
+                                    <p class="text-xl font-bold text-amber-700">Tổng quan về thu chi của quỹ nhóm</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Filter Section -->
+                            <div class="bg-white p-4 rounded-lg border border-gray-200 mb-6">
+                                <h3 class="text-md font-semibold mb-3 text-gray-700">Bộ lọc báo cáo</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Từ ngày:</label>
+                                        <input type="date" id="fund-report-from-date" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Đến ngày:</label>
+                                        <input type="date" id="fund-report-to-date" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                                    </div>
+                                    <div class="flex items-end">
+                                        <button id="generate-fund-report-btn" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-md w-full flex items-center justify-center">
+                                            <i data-lucide="filter" class="w-4 h-4 mr-1"></i>
+                                            Tạo báo cáo
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Fund Report Results -->
+                            <div id="fund-report-loading" class="hidden flex items-center justify-center p-6 mb-6">
+                                <div class="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-amber-500"></div>
+                                <span class="ml-3 text-amber-700">Đang tải dữ liệu...</span>
+                            </div>
+                            
+                            <!-- Fund Report Results -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                <div>
+                                    <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                                        <i data-lucide="pie-chart" class="w-4 h-4 mr-1 text-amber-500"></i>
+                                        Biểu đồ phân bổ
+                                    </h3>
+                                    <div class="bg-white p-3 rounded shadow-sm border border-gray-200">
+                                        <canvas id="fund-report-pie-chart" width="400" height="200"></canvas>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                                        <i data-lucide="bar-chart-2" class="w-4 h-4 mr-1 text-amber-500"></i>
+                                        Biểu đồ xu hướng
+                                    </h3>
+                                    <div class="bg-white p-3 rounded shadow-sm border border-gray-200">
+                                        <canvas id="fund-report-trend-chart" width="400" height="200"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Detailed Transaction List -->
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="text-lg font-semibold text-gray-700 flex items-center">
+                                    <i data-lucide="list" class="w-4 h-4 mr-1 text-amber-500"></i>
+                                    Chi tiết giao dịch quỹ
+                                </h3>
+                                <div class="flex space-x-2">
+                                    <button id="export-fund-report-csv" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-md flex items-center text-sm disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                        <i data-lucide="file-text" class="w-4 h-4 mr-1"></i>
+                                        Xuất CSV
+                                    </button>
+                                    <button id="export-fund-report-pdf" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-md flex items-center text-sm disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                        <i data-lucide="file-type-pdf" class="w-4 h-4 mr-1"></i>
+                                        Xuất PDF
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="bg-white p-3 rounded shadow-sm border border-gray-200 overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ngày</th>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thành viên</th>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Loại</th>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số tiền</th>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ghi chú</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="fund-report-transactions" class="bg-white divide-y divide-gray-200">
+                                        <tr>
+                                            <td colspan="5" class="px-4 py-4 text-sm text-gray-500 text-center italic">Chọn khoảng thời gian và nhấn "Tạo báo cáo" để xem dữ liệu</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- General Expense Report -->
+                        <div id="general-expense-report-content" class="tab-pane">
+                            <div class="bg-emerald-100 p-4 mb-4 rounded-lg">
+                                <h3 class="text-lg font-bold text-emerald-800 mb-4">Báo cáo Chi tiêu Chung</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Từ ngày:</label>
+                                        <input type="date" id="general-report-from-date" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Đến ngày:</label>
+                                        <input type="date" id="general-report-to-date" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                                    </div>
+                                </div>
+                                <button id="generate-general-report-btn" class="w-full md:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors flex items-center justify-center space-x-2">
+                                    <span>Tạo báo cáo</span>
+                                    <i data-lucide="bar-chart-2" class="h-4 w-4"></i>
+                                </button>
+                            </div>
+                            
+                            <!-- Loading indicator for General Report -->
+                            <div id="general-report-loading" class="hidden flex items-center justify-center p-6 mb-6">
+                                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-700"></div>
+                                <span class="ml-3 text-emerald-700 font-medium">Đang tải dữ liệu...</span>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                <div>
+                                    <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                                        <i data-lucide="pie-chart" class="w-4 h-4 mr-1 text-emerald-500"></i>
+                                        Phân loại chi tiêu
+                                    </h3>
+                                    <div class="bg-white p-3 rounded shadow-sm border border-gray-200">
+                                        <canvas id="general-report-category-chart" width="400" height="200"></canvas>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                                        <i data-lucide="bar-chart-2" class="w-4 h-4 mr-1 text-emerald-500"></i>
+                                        Chi tiêu theo thời gian
+                                    </h3>
+                                    <div class="bg-white p-3 rounded shadow-sm border border-gray-200">
+                                        <canvas id="general-report-time-chart" width="400" height="200"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Expense Summary -->
+                            <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                                <i data-lucide="list" class="w-4 h-4 mr-1 text-emerald-500"></i>
+                                Tổng hợp chi tiêu
+                            </h3>
+                            <div class="bg-white p-4 rounded shadow-sm border border-gray-200 mb-6">
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                    <div class="bg-emerald-50 p-3 rounded-lg border border-emerald-100">
+                                        <p class="text-sm text-emerald-700">Tổng chi tiêu:</p>
+                                        <p class="text-xl font-bold text-emerald-600" id="general-report-total-expense">0 VNĐ</p>
+                                    </div>
+                                    <div class="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                                        <p class="text-sm text-blue-700">Chi tiêu trung bình/ngày:</p>
+                                        <p class="text-xl font-bold text-blue-600" id="general-report-avg-expense">0 VNĐ</p>
+                                    </div>
+                                    <div class="bg-purple-50 p-3 rounded-lg border border-purple-100">
+                                        <p class="text-sm text-purple-700">Chi tiêu cao nhất:</p>
+                                        <p class="text-xl font-bold text-purple-600" id="general-report-max-expense">0 VNĐ</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Detailed Expense List -->
+                            <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                                <i data-lucide="list-details" class="w-4 h-4 mr-1 text-emerald-500"></i>
+                                Chi tiết các khoản chi
+                            </h3>
+                            <div class="bg-white p-3 rounded shadow-sm border border-gray-200 overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ngày</th>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chi tiêu</th>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Người trả</th>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số tiền</th>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Người tham gia</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="general-report-expenses" class="bg-white divide-y divide-gray-200">
+                                        <tr>
+                                            <td colspan="5" class="px-4 py-4 text-sm text-gray-500 text-center italic">Chọn khoảng thời gian và nhấn "Tạo báo cáo" để xem dữ liệu</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- Member Expense Report -->
+                        <div id="member-expense-report-content" class="tab-pane">
+                            <div class="bg-gradient-to-r from-indigo-100 to-purple-200 p-4 rounded-lg shadow-sm mb-6 flex items-center">
+                                <div class="bg-purple-500 text-white p-2 rounded-full mr-3">
+                                    <i data-lucide="user" class="w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-purple-800">Báo cáo chi tiêu thành viên</p>
+                                    <p class="text-xl font-bold text-purple-700">Phân tích chi tiêu của từng thành viên</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Filter Section -->
+                            <div class="bg-white p-4 rounded-lg border border-gray-200 mb-6">
+                                <h3 class="text-md font-semibold mb-3 text-gray-700">Bộ lọc báo cáo</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Thành viên:</label>
+                                        <select id="member-report-user" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                                            <option value="all">Tất cả thành viên</option>
+                                            <!-- Options will be populated here -->
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Từ ngày:</label>
+                                        <input type="date" id="member-report-from-date" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Đến ngày:</label>
+                                        <input type="date" id="member-report-to-date" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                                    </div>
+                                    <div class="flex items-end">
+                                        <button id="generate-member-report-btn" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md w-full flex items-center justify-center">
+                                            <i data-lucide="filter" class="w-4 h-4 mr-1"></i>
+                                            Tạo báo cáo
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Member Report Results -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                <div>
+                                    <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                                        <i data-lucide="bar-chart-2" class="w-4 h-4 mr-1 text-purple-500"></i>
+                                        Chi tiêu theo thành viên
+                                    </h3>
+                                    <div class="bg-white p-3 rounded shadow-sm border border-gray-200">
+                                        <canvas id="member-report-comparison-chart" width="400" height="200"></canvas>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                                        <i data-lucide="trending-up" class="w-4 h-4 mr-1 text-purple-500"></i>
+                                        Xu hướng chi tiêu
+                                    </h3>
+                                    <div class="bg-white p-3 rounded shadow-sm border border-gray-200">
+                                        <canvas id="member-report-trend-chart" width="400" height="200"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Member Summary -->
+                            <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                                <i data-lucide="clipboard-list" class="w-4 h-4 mr-1 text-purple-500"></i>
+                                Tổng hợp theo thành viên
+                            </h3>
+                            <div class="bg-white p-4 rounded shadow-sm border border-gray-200 mb-6" id="member-summary-cards">
+                                <!-- Member summary cards will be populated here -->
+                                <p class="text-center text-gray-500 italic py-4">Chọn bộ lọc và nhấn "Tạo báo cáo" để xem dữ liệu</p>
+                            </div>
+                            
+                            <!-- Detailed Member Expense List -->
+                            <h3 class="text-lg font-semibold mb-3 text-gray-700 flex items-center">
+                                <i data-lucide="list-details" class="w-4 h-4 mr-1 text-purple-500"></i>
+                                Chi tiết chi tiêu theo thành viên
+                            </h3>
+                            <div class="bg-white p-3 rounded shadow-sm border border-gray-200 overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ngày</th>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thành viên</th>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chi tiêu</th>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vai trò</th>
+                                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số tiền</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="member-report-expenses" class="bg-white divide-y divide-gray-200">
+                                        <tr>
+                                            <td colspan="5" class="px-4 py-4 text-sm text-gray-500 text-center italic">Chọn khoảng thời gian và nhấn "Tạo báo cáo" để xem dữ liệu</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>

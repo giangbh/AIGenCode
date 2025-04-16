@@ -51,6 +51,8 @@ export class UIController {
                     this.app.renderGroupFund();
                 } else if (targetTab === 'members') {
                     this.app.renderMembers();
+                } else if (targetTab === 'reports') {
+                    this.app.renderReports();
                 }
             });
         });

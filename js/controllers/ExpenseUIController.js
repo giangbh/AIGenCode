@@ -2075,6 +2075,13 @@ export class ExpenseUIController extends UIController {
             <i data-lucide="copy" class="w-3.5 h-3.5"></i>
         </button>`;
         
+        // Tạo phiên bản compact để hiển thị ngoài không gian thu gọn
+        const compactLocationBtn = hasLocation 
+            ? `<button class="view-location-btn text-blue-600 hover:text-blue-800 mr-1 p-1 rounded-full hover:bg-blue-50 transition-colors duration-200" data-id="${expense.id}" title="Xem vị trí">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
+              </button>` 
+            : '';
+        
         // Create a separate badge for the unexpanded view
         const locationBadgeOutside = hasLocation 
             ? `<span class="inline-flex items-center px-1.5 py-0 rounded-full text-xs font-medium bg-blue-100 text-blue-800 ml-1 shadow-sm border border-blue-200">
@@ -2096,6 +2103,14 @@ export class ExpenseUIController extends UIController {
                             <i data-lucide="user" class="w-2.5 h-2.5 mr-0.5 text-gray-400"></i>
                             <span class="${payerDisplayClass} truncate">${expense.payer}</span>
                         </div>
+                        
+                        <!-- Location preview - nếu có vị trí -->
+                        ${hasLocation ? `
+                        <div class="mt-1 text-xs text-blue-600 flex items-center bg-blue-50 py-0.5 px-1 rounded border border-blue-100 w-fit hover:bg-blue-100 transition-colors cursor-pointer">
+                            <i data-lucide="map-pin" class="w-2.5 h-2.5 mr-0.5 text-blue-500"></i>
+                            <span class="truncate" style="max-width: 180px;">${location.name || 'Địa điểm chi tiêu'}</span>
+                        </div>
+                        ` : ''}
                     </div>
                     <div class="text-right ml-2">
                         <p class="text-md font-bold text-green-600">${formattedAmount}</p>
@@ -2106,13 +2121,18 @@ export class ExpenseUIController extends UIController {
                     </div>
                 </div>
                 
-                <!-- Location preview - chỉ hiển thị icon nhỏ -->
-                ${hasLocation ? `
-                <div class="mt-1 text-xs text-blue-600 flex items-center bg-blue-50 py-0.5 px-1 rounded border border-blue-100 w-fit hover:bg-blue-100 transition-colors cursor-pointer">
-                    <i data-lucide="map-pin" class="w-2.5 h-2.5 mr-0.5 text-blue-500"></i>
-                    <span class="truncate" style="max-width: 180px;">${location.name || 'Địa điểm chi tiêu'}</span>
+                <!-- Các nút tương tác - hiển thị luôn không cần expand -->
+                <div class="flex justify-between items-center mt-1 border-t border-gray-100 pt-1">
+                    <div class="flex items-center">
+                        ${compactLocationBtn}
+                        ${copyButton}
+                        ${editButton}
+                        ${deleteButton}
+                    </div>
+                    <button class="expand-btn text-gray-600 hover:text-gray-800 p-1 rounded-full hover:bg-gray-100 transition-colors duration-200">
+                        <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+                    </button>
                 </div>
-                ` : ''}
                 
                 <div class="expense-details hidden mt-2 border-t border-gray-100 pt-1.5">
                     <div class="text-xs font-medium text-gray-700 mb-0.5 flex items-center">
@@ -2123,21 +2143,12 @@ export class ExpenseUIController extends UIController {
                         ${participantsList}
                     </div>
                     ${locationDetails}
-                    <div class="flex justify-between items-center mt-1.5 pt-1.5 border-t border-gray-100">
-                        <div class="flex items-center">
-                            ${locationBtn}
-                            ${copyButton}
-                            ${editButton}
-                            ${deleteButton}
-                        </div>
+                    <div class="flex justify-end mt-1.5 pt-1.5 border-t border-gray-100">
                         <button class="collapse-btn text-gray-600 hover:text-gray-800 p-1 rounded-full hover:bg-gray-100 transition-colors duration-200">
                             <i data-lucide="chevron-up" class="w-3.5 h-3.5"></i>
                         </button>
                     </div>
                 </div>
-                <button class="expand-btn text-gray-600 hover:text-gray-800 w-full flex justify-center p-0.5 hover:bg-gray-50 rounded transition-colors duration-200">
-                    <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
-                </button>
             </div>
         `;
         

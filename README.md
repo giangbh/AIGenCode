@@ -12,6 +12,7 @@ CafeThu6 là ứng dụng web giúp quản lý chi tiêu nhóm, tính toán và 
 - Hiển thị chi tiết chi tiêu với người trả và người tham gia
 - Tự động tính toán kết quả chia tiền
 - **Gợi ý chi tiêu thông minh** dựa trên lịch sử giao dịch
+- **Giao diện chi tiêu tối ưu** với các nút tác vụ nhanh và hiển thị gọn gàng
 
 ### 2. Quản lý quỹ nhóm
 - Theo dõi số dư quỹ nhóm hiện tại
@@ -46,6 +47,12 @@ CafeThu6 là ứng dụng web giúp quản lý chi tiêu nhóm, tính toán và 
 - Tự động lọc và đề xuất theo chi tiêu gần đây (trong vòng 3 tháng)
 - Giao diện trực quan và dễ sử dụng cho các gợi ý
 
+### 8. Tính năng vị trí
+- Lưu vị trí khi tạo chi tiêu mới
+- Hiển thị vị trí chi tiêu trên bản đồ
+- Hiển thị badge vị trí trên bản ghi chi tiêu
+- Nút tác vụ xem vị trí nhanh chóng
+
 ## Cài đặt và cấu hình
 
 ### Yêu cầu hệ thống
@@ -78,6 +85,7 @@ CafeThu6 là ứng dụng web giúp quản lý chi tiêu nhóm, tính toán và 
 2. Chọn người tham gia và phương thức chia tiền
 3. Xem kết quả tính toán ở phần "Kết quả chia tiền"
 4. Sử dụng gợi ý thông minh để nhanh chóng chọn chi tiêu thường xuyên
+5. Tương tác nhanh với các bản ghi chi tiêu qua các nút tác vụ
 
 ### Quản lý quỹ
 1. Theo dõi số dư quỹ hiện tại
@@ -89,6 +97,15 @@ CafeThu6 là ứng dụng web giúp quản lý chi tiêu nhóm, tính toán và 
 1. Thêm thành viên mới với tên và thông tin tài khoản
 2. Chỉnh sửa thông tin tài khoản
 3. Xóa thành viên (chỉ admin)
+
+## Tài liệu hướng dẫn chi tiết
+
+Đọc thêm tài liệu hướng dẫn chi tiết trong thư mục [docs/guides](docs/guides):
+
+- [Hướng dẫn sử dụng](docs/guides/huong_dan_su_dung.md)
+- [Gợi ý chi tiêu thông minh](docs/guides/expense-suggestions.md)
+- [Tính năng vị trí](docs/guides/location-features.md)
+- [Giao diện chi tiêu mới](docs/guides/expense-ui-updates.md)
 
 ## Đóng góp và phát triển
 

@@ -487,6 +487,8 @@ export class ReportsUIController extends UIController {
             const modelSettings = CONFIG.AI_SETTINGS.GEMINI;
             const validCategories = CONFIG.AI_SETTINGS.EXPENSE_CATEGORIES;
             
+            console.log(`🤖 Gửi yêu cầu phân loại đến Google AI cho "${expenseName}"`);
+            
             // Prepare the request to Gemini API
             const response = await fetch(`${API_ENDPOINT}?key=${API_KEY}`, {
                 method: 'POST',
@@ -512,10 +514,12 @@ export class ReportsUIController extends UIController {
 
             if (!response.ok) {
                 console.error('Gemini API error:', await response.text());
+                console.log(`❌ Lỗi API, sử dụng phương pháp dự phòng cho "${expenseName}"`);
                 return this.categorizeFallback(expenseName);
             }
 
             const data = await response.json();
+            console.log(`📊 Phản hồi đầy đủ từ Google AI:`, data);
             
             // Extract just the category name from the response
             if (data.candidates && data.candidates.length > 0 && 
@@ -524,6 +528,7 @@ export class ReportsUIController extends UIController {
                 data.candidates[0].content.parts.length > 0) {
                 
                 const category = data.candidates[0].content.parts[0].text.trim();
+                console.log(`✅ Google AI đã phân loại "${expenseName}" thành "${category}"`);
                 
                 // Validate that we got a valid category
                 if (validCategories.includes(category)) {
@@ -532,12 +537,17 @@ export class ReportsUIController extends UIController {
                     this.categoryCache[expenseName.toLowerCase()] = category;
                     
                     return category;
+                } else {
+                    console.log(`⚠️ Google AI trả về loại không hợp lệ "${category}", sử dụng dự phòng`);
                 }
+            } else {
+                console.log(`⚠️ Không tìm thấy kết quả phân loại trong phản hồi của Google AI`);
             }
             
             return this.categorizeFallback(expenseName);
         } catch (error) {
             console.error('Error categorizing with Gemini:', error);
+            console.log(`❌ Lỗi phân loại chi tiêu "${expenseName}": ${error.message}`);
             return this.categorizeFallback(expenseName);
         }
     }
@@ -551,6 +561,7 @@ export class ReportsUIController extends UIController {
         // Check if we have this in cache
         this.categoryCache = this.categoryCache || {};
         if (this.categoryCache[expenseName.toLowerCase()]) {
+            console.log(`📋 Sử dụng kết quả đã lưu trong cache cho "${expenseName}": "${this.categoryCache[expenseName.toLowerCase()]}"`);
             return this.categoryCache[expenseName.toLowerCase()];
         }
         
@@ -572,6 +583,8 @@ export class ReportsUIController extends UIController {
             category = 'Giải trí';
         }
         
+        console.log(`🔍 Phân loại dự phòng bằng từ khóa cho "${expenseName}": "${category}"`);
+        
         // Cache the result
         this.categoryCache[expenseNameLower] = category;
         return category;
@@ -583,6 +596,8 @@ export class ReportsUIController extends UIController {
      * @returns {Promise<Object>} - Mapping of expenses to categories
      */
     async categorizeExpenses(expenses) {
+        console.log(`🤖 Bắt đầu phân loại hàng loạt cho ${expenses.length} chi tiêu`);
+        
         // Initialize the categoryCache if not exists
         this.categoryCache = this.categoryCache || {};
         
@@ -600,18 +615,25 @@ export class ReportsUIController extends UIController {
             }
         }
         
+        console.log(`📊 Kết quả phân loại ban đầu (cache/dự phòng):`, categories);
+        
         // Second pass: asynchronously update with AI categories
         // Use a limited batch to avoid overwhelming the API
         const MAX_BATCH_SIZE = CONFIG.CACHE.MAX_BATCH_SIZE;
         const toProcess = expenses.filter(e => !this.categoryCache[e.name.toLowerCase()]).slice(0, MAX_BATCH_SIZE);
         
+        console.log(`🔄 Đang gửi ${toProcess.length} chi tiêu để phân loại bằng AI`);
+        
         for (const expense of toProcess) {
+            console.log(`🔍 Đang phân loại "${expense.name}" (ID: ${expense.id})`);
             const aiCategory = await this.categorizeExpenseWithGemini(expense.name);
             // Update the category with AI result
             categories[expense.id] = aiCategory;
             // Update the view if needed
             this.updateCategoryInCharts(expense.id, aiCategory);
         }
+        
+        console.log(`✅ Hoàn thành phân loại hàng loạt với kết quả cuối cùng:`, categories);
         
         return categories;
     }
@@ -624,6 +646,11 @@ export class ReportsUIController extends UIController {
     updateCategoryInCharts(expenseId, category) {
         // Log the AI categorization for debugging
         console.log(`AI categorized expense ${expenseId} as "${category}"`);
+        
+        // Enhanced logging with visual indicators
+        const expenseName = this.getExpenseName(expenseId) || 'Unknown Expense';
+        console.log(`🏷️ PHÂN LOẠI AI: "${expenseName}" → "${category}"`);
+        console.log(`   ID: ${expenseId}`);
         
         // Show AI categorization status message in UI
         const statusElement = document.getElementById('ai-categorization-status');
@@ -639,6 +666,8 @@ export class ReportsUIController extends UIController {
         
         // If the chart exists, update it with the new category data
         if (this.generalCategoryChart) {
+            console.log(`📊 Cập nhật biểu đồ với phân loại mới cho "${expenseName}"`);
+            
             // Rebuild the category data with the updated category
             if (this.currentGeneralReportData && this.currentGeneralReportData.expenses) {
                 // Create a new category mapping using the latest AI results
@@ -656,10 +685,13 @@ export class ReportsUIController extends UIController {
                 
                 // Update category amounts with new mapping
                 const updatedCategoryAmounts = this.aggregateByCategory(this.currentGeneralReportData.expenses, categories);
+                console.log(`📈 Tổng hợp theo phân loại sau khi cập nhật:`, updatedCategoryAmounts);
                 
                 // Re-draw chart with updated data
                 this.drawCategoryChart(updatedCategoryAmounts);
             }
+        } else {
+            console.log(`ℹ️ Không có biểu đồ để cập nhật cho phân loại "${category}"`);
         }
     }
     

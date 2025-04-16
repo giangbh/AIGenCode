@@ -16,7 +16,7 @@ export class ExpenseManager {
     constructor(fundManager) {
         this.expenses = [];
         this.fundManager = fundManager;
-        this.GROUP_FUND_PAYER_ID = "__GROUP_FUND__";
+        this.GROUP_FUND_PAYER_ID = "Group Fund";
         
         // Load expenses
         this.loadData();

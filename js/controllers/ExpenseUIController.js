@@ -57,6 +57,11 @@ export class ExpenseUIController extends UIController {
         this.map = null; // Will hold the Google Maps instance
         this.marker = null; // Will hold the map marker
         
+        // Make debugging functions available in console
+        if (typeof window !== 'undefined') {
+            window.debugExpenseLocations = this.debugAllExpenseLocations.bind(this);
+        }
+        
         // Initialize UI
         this.initUI();
     }
@@ -398,11 +403,16 @@ export class ExpenseUIController extends UIController {
 
         // Get paginated expenses from server
         const paginatedData = await this.app.expenseManager.getPaginatedExpensesFromServer(
-            this.currentPage, 
+            this.currentPage,
             5, // items per page
-            this.sortField, 
+            this.sortField,
             this.sortDirection
         );
+        
+        // Debug location data for all expenses
+        if (paginatedData && paginatedData.items) {
+            this.debugLocationData(paginatedData.items);
+        }
         
         // LOG RECEIVED DATA FROM API FOR DEBUGGING
         console.log("DEBUG - API response:", paginatedData);
@@ -414,14 +424,12 @@ export class ExpenseUIController extends UIController {
         // Clear loading indicator
         this.expenseList.innerHTML = '';
         
-        const expenses = this.app.expenseManager.getAllExpenses();
-        
-        // Show message if no expenses yet
-        if (expenses.length === 0) {
+        // Kiểm tra dữ liệu phân trang
+        if (!paginatedData || !paginatedData.items || paginatedData.items.length === 0) {
             this.noExpensesMessage.classList.remove('hidden');
             return;
         }
-        
+
         this.noExpensesMessage.classList.add('hidden');
         
         // Hiển thị gợi ý chi tiêu nếu không trong chế độ chỉnh sửa
@@ -535,175 +543,8 @@ export class ExpenseUIController extends UIController {
         
         // Render current page items
         currentPageItems.forEach(expense => {
-            const card = document.createElement('div');
-            card.className = 'bg-white rounded-lg shadow-md mb-3 border border-gray-100 hover:border-green-200 transition-all duration-200 overflow-hidden';
-            card.dataset.expenseId = expense.id;
-            
-            // Create collapsible header
-            const header = document.createElement('div');
-            header.className = 'p-3 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors';
-            header.onclick = function() {
-                const body = this.nextElementSibling;
-                if (body.style.maxHeight) {
-                    body.style.maxHeight = null;
-                    this.querySelector('.collapse-icon').innerHTML = '<i data-lucide="chevron-down" class="w-4 h-4"></i>';
-                } else {
-                    body.style.maxHeight = body.scrollHeight + "px";
-                    this.querySelector('.collapse-icon').innerHTML = '<i data-lucide="chevron-up" class="w-4 h-4"></i>';
-                }
-            };
-
-            // Left side of header with name and amount
-            const headerLeft = document.createElement('div');
-            headerLeft.className = 'flex items-center space-x-3';
-            
-            const amount = document.createElement('span');
-            amount.className = 'text-lg font-bold text-green-600';
-            amount.textContent = formatCurrency(expense.amount);
-
-            const title = document.createElement('span');
-            title.className = 'font-medium text-gray-800';
-            title.textContent = expense.name;
-            
-            // Add payer badge
-            const payerBadge = document.createElement('span');
-            if (expense.payer === this.app.expenseManager.GROUP_FUND_PAYER_ID) {
-                payerBadge.className = 'ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800';
-                payerBadge.innerHTML = '<i data-lucide="piggy-bank" class="w-3 h-3 mr-1"></i>Quỹ nhóm';
-            } else {
-                payerBadge.className = 'ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800';
-                payerBadge.innerHTML = `<i data-lucide="user" class="w-3 h-3 mr-1"></i>${expense.payer}`;
-            }
-            
-            // Add participants count badge
-            const participantsBadge = document.createElement('span');
-            participantsBadge.className = 'ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800';
-            participantsBadge.innerHTML = `<i data-lucide="users" class="w-3 h-3 mr-1"></i>${expense.participants.length}`;
-            
-            headerLeft.appendChild(amount);
-            headerLeft.appendChild(title);
-            headerLeft.appendChild(payerBadge);
-            headerLeft.appendChild(participantsBadge);
-            
-            // Right side of header with date and collapse icon
-            const headerRight = document.createElement('div');
-            headerRight.className = 'flex items-center';
-            
-            // Tạo phần tử hiển thị thời gian tạo
-            const timestamp = document.createElement('span');
-            timestamp.className = 'text-sm text-gray-500 mr-2';
-            if (expense.created_at) {
-                timestamp.innerHTML = `<i data-lucide="clock" class="w-3 h-3 mr-1 inline"></i>${formatTimestamp(expense.created_at)}`;
-            } else {
-                // Fallback nếu không có created_at
-                timestamp.textContent = formatDisplayDate(expense.date);
-            }
-            
-            // Add copy button to header
-            const copyBtn = document.createElement('button');
-            copyBtn.type = 'button';
-            copyBtn.className = 'text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50 transition-colors mr-2';
-            copyBtn.innerHTML = '<i data-lucide="copy" class="w-4 h-4"></i>';
-            copyBtn.title = 'Sao chép chi tiêu';
-            copyBtn.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevent toggling collapse
-                this.handleCopyExpense(expense.id);
-            });
-            
-            const collapseIcon = document.createElement('span');
-            collapseIcon.className = 'collapse-icon';
-            collapseIcon.innerHTML = '<i data-lucide="chevron-down" class="w-4 h-4"></i>';
-            
-            headerRight.appendChild(timestamp);
-            headerRight.appendChild(copyBtn);
-            headerRight.appendChild(collapseIcon);
-            
-            header.appendChild(headerLeft);
-            header.appendChild(headerRight);
-            
-            // Create collapsible body
-            const body = document.createElement('div');
-            body.className = 'overflow-hidden transition-all duration-300';
-            body.style.maxHeight = "0";
-            body.style.transition = "max-height 0.3s ease-out";
-            
-            const bodyContent = document.createElement('div');
-            bodyContent.className = 'p-3 pt-0 border-t border-gray-100';
-            
-            // Add details
-            const details = document.createElement('div');
-            details.className = 'mb-3';
-            
-            const payer = document.createElement('p');
-            payer.className = 'text-sm text-gray-700';
-            
-            if (expense.payer === this.app.expenseManager.GROUP_FUND_PAYER_ID) {
-                payer.innerHTML = `Người trả: <span class="font-semibold text-sky-700">Quỹ nhóm</span>`;
-            } else {
-                payer.innerHTML = `Người trả: <span class="font-semibold">${expense.payer}</span>`;
-            }
-            
-            const participants = document.createElement('p');
-            participants.className = 'text-sm text-gray-700';
-            participants.textContent = `Người tham gia: ${expense.participants.join(', ')}`;
-            
-            // Thêm thông tin ngày chi tiêu
-            const expenseDate = document.createElement('p');
-            expenseDate.className = 'text-sm text-gray-700 mt-1';
-            expenseDate.innerHTML = `Ngày chi tiêu: <span class="font-medium">${formatDisplayDate(expense.date)}</span>`;
-            
-            // Thêm thông tin thời gian tạo chi tiêu
-            const createdTime = document.createElement('p');
-            createdTime.className = 'text-sm text-gray-700';
-            if (expense.created_at) {
-                createdTime.innerHTML = `Thời gian ghi nhận: <span class="font-mono text-gray-600">${formatTimestamp(expense.created_at)}</span>`;
-            }
-            
-            details.appendChild(payer);
-            details.appendChild(participants);
-            details.appendChild(expenseDate);
-            if (expense.created_at) {
-                details.appendChild(createdTime);
-            }
-            
-            // Add actions
-            const actions = document.createElement('div');
-            actions.className = 'flex justify-end space-x-2 pt-2 border-t border-gray-100';
-            
-            const editBtn = document.createElement('button');
-            editBtn.type = 'button';
-            editBtn.className = 'text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50 transition-colors flex items-center text-sm';
-            editBtn.innerHTML = '<i data-lucide="edit" class="w-4 h-4 mr-1"></i> Sửa';
-            editBtn.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevent toggling collapse
-                this.handleEditExpense(expense.id);
-            });
-            
-            const deleteBtn = document.createElement('button');
-            deleteBtn.type = 'button';
-            deleteBtn.className = 'text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 transition-colors flex items-center text-sm';
-            deleteBtn.innerHTML = '<i data-lucide="trash" class="w-4 h-4 mr-1"></i> Xóa';
-            deleteBtn.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevent toggling collapse
-                this.handleDeleteExpense(expense.id);
-            });
-            
-            // Only add delete button if user is admin
-            if (isAdmin()) {
-                actions.appendChild(deleteBtn);
-            }
-            
-            actions.appendChild(editBtn);
-            
-            bodyContent.appendChild(details);
-            bodyContent.appendChild(actions);
-            body.appendChild(bodyContent);
-            
-            // Assemble card
-            card.appendChild(header);
-            card.appendChild(body);
-            
-            this.expenseList.appendChild(card);
+            const expenseElement = this.createExpenseListItem(expense);
+            this.expenseList.appendChild(expenseElement);
         });
         
         // Create pagination controls if needed
@@ -874,11 +715,55 @@ export class ExpenseUIController extends UIController {
         lucide.createIcons({
             scope: this.expenseList
         });
+    }
+    
+    /**
+     * Debug location data for all expenses
+     * @param {Array} expenses - Expenses to debug
+     */
+    debugLocationData(expenses) {
+        console.log("========== LOCATION DEBUG INFO ==========");
+        console.log(`Total expenses: ${expenses.length}`);
         
-        // Call debug method to show location info
-        setTimeout(() => {
-            this.showDebugLocationInfo();
-        }, 100);
+        expenses.forEach(expense => {
+            console.log(`\n----- Expense: ${expense.id} (${expense.name}) -----`);
+            
+            if (!expense.location) {
+                console.log("Location: NONE (null or undefined)");
+                return;
+            }
+            
+            console.log("Location data type:", typeof expense.location);
+            
+            if (typeof expense.location === 'string') {
+                console.log("Location (raw string):", expense.location);
+                try {
+                    const parsed = JSON.parse(expense.location);
+                    console.log("Location (parsed from string):", parsed);
+                    console.log("Has valid coords:", 
+                        parsed && 
+                        typeof parsed === 'object' && 
+                        'lat' in parsed && 
+                        'lng' in parsed && 
+                        parsed.lat !== null && 
+                        parsed.lng !== null
+                    );
+                } catch (e) {
+                    console.log("Could not parse location string:", e.message);
+                }
+            } else if (typeof expense.location === 'object') {
+                console.log("Location (object):", expense.location);
+                console.log("Has valid coords:", 
+                    expense.location && 
+                    'lat' in expense.location && 
+                    'lng' in expense.location && 
+                    expense.location.lat !== null && 
+                    expense.location.lng !== null
+                );
+            }
+        });
+        
+        console.log("=========================================");
     }
     
     /**
@@ -1504,10 +1389,15 @@ export class ExpenseUIController extends UIController {
 
     /**
      * Hiển thị gợi ý tên chi tiêu
+     * Tạm thời bị vô hiệu hóa
      * @param {Array} suggestions - Mảng các gợi ý
      * @param {HTMLElement} inputElement - Input element
      */
     showNameAutocomplete(suggestions = [], inputElement = this.expenseNameInput) {
+        // Đã tạm thời vô hiệu hóa chức năng này
+        return;
+        
+        /* Mã gốc đã bị comment
         this.closeAllAutocomplete();
         
         const container = document.getElementById('expense-name-suggestions');
@@ -1604,6 +1494,7 @@ export class ExpenseUIController extends UIController {
         if (items.length > 0) {
             items[0].classList.add('active');
         }
+        */
     }
     
     /**
@@ -1812,6 +1703,10 @@ export class ExpenseUIController extends UIController {
      * Handle keyboard navigation for the name autocomplete
      */
     handleNameInputKeypress(e) {
+        // Đã tạm thời vô hiệu hóa
+        return;
+        
+        /* Mã gốc đã bị comment
         // Only process keyboard events when the dropdown is visible
         const container = document.getElementById('expense-name-suggestions');
         if (!container || container.classList.contains('hidden')) return;
@@ -1881,6 +1776,7 @@ export class ExpenseUIController extends UIController {
             // Close autocomplete on tab key, but don't prevent default
             this.closeAllAutocomplete();
         }
+        */
     }
     
     /**
@@ -2066,7 +1962,7 @@ export class ExpenseUIController extends UIController {
      */
     createExpenseListItem(expense) {
         const item = document.createElement('div');
-        item.className = 'expense-item bg-white border border-gray-200 rounded-lg shadow-sm transition-all duration-200 overflow-hidden hover:shadow-md mb-4';
+        item.className = 'expense-item bg-white border border-gray-200 rounded-md shadow-sm transition-all duration-200 overflow-hidden hover:shadow-md mb-2';
         item.setAttribute('data-id', expense.id);
         
         // Enhanced debugging for location data
@@ -2084,16 +1980,11 @@ export class ExpenseUIController extends UIController {
         const isGroupFund = expense.payer === this.app.expenseManager.GROUP_FUND_PAYER_ID;
         const payerDisplayClass = isGroupFund ? 'text-sky-700 font-semibold' : '';
         
-        // Get the participant info for displaying split amounts
+        // Get the participant info for displaying split amounts - thêm class min-w-0 để giúp truncate tốt hơn
         const participantsList = expense.participants.map(participant => {
             const splitAmount = expense.getSplitAmountFor(participant);
-            return `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 mr-2 mb-1">${participant}: ${formatCurrency(splitAmount)}</span>`;
+            return `<span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 mr-1 mb-1">${participant}: ${formatCurrency(splitAmount)}</span>`;
         }).join('');
-        
-        // Create timestamp display
-        const timestampHtml = expense.created_at 
-            ? `<div class="text-xs text-gray-500 mt-1">${formatTimestamp(expense.created_at)}</div>`
-            : '';
 
         // --- Simplified Location Handling ---
         let location = null;
@@ -2105,7 +1996,7 @@ export class ExpenseUIController extends UIController {
                 ? expense.location
                 : JSON.stringify(expense.location);
             rawLocationDisplay = `
-                <div class="mt-2 text-sm bg-gray-100 p-2 rounded border border-gray-200">
+                <div class="mt-1 text-xs bg-gray-100 p-1 rounded border border-gray-200">
                     <p class="font-medium text-gray-600 text-xs">Dữ liệu vị trí gốc:</p>
                     <p class="text-xs text-gray-500 break-words">${rawLocationStr}</p>
                 </div>
@@ -2140,116 +2031,112 @@ export class ExpenseUIController extends UIController {
         console.log(`DEBUG [${expense.id}]: Final 'hasLocation' result:`, hasLocation);
         // --- End Simplified Location Handling ---
         
-        // Add location badge to expense header if location exists
+        // Add location badge to expense header if location exists - thu gọn
         const locationBadge = hasLocation 
-            ? `<span class="inline-flex items-center ml-2 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 shadow-sm border border-blue-200">
-                <i data-lucide="map-pin" class="w-3 h-3 mr-1 text-blue-500"></i>Có vị trí
+            ? `<span class="inline-flex items-center ml-1 px-1 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 shadow-sm border border-blue-200">
+                <i data-lucide="map-pin" class="w-2.5 h-2.5 mr-0.5 text-blue-500"></i>
                </span>` 
             : '';
             
         // Location button for detailed view
         const locationBtn = hasLocation 
-            ? `<button class="view-location-btn text-blue-600 hover:text-blue-800 flex items-center mr-3 px-3 py-1.5 rounded-md hover:bg-blue-50 transition-colors duration-200" data-id="${expense.id}">
-                <i data-lucide="map-pin" class="w-4 h-4 mr-1.5"></i>
-                Xem vị trí
+            ? `<button class="view-location-btn text-blue-600 hover:text-blue-800 flex items-center mr-2 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors duration-200" data-id="${expense.id}">
+                <i data-lucide="map-pin" class="w-3 h-3 mr-1"></i>
+                Vị trí
                </button>` 
             : '';
             
-        // Location details if available
+        // Location details if available - thu gọn phần này
         const locationDetails = hasLocation 
-            ? `<div class="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                <p class="font-medium text-gray-700 mb-1 flex items-center">
-                  <i data-lucide="map-pin" class="w-4 h-4 mr-1.5 text-blue-500"></i>
-                  Vị trí chi tiêu:
-                </p>
-                <p class="text-gray-600 font-medium">${location.name || 'Không có tên địa điểm'}</p>
-                <p class="text-xs text-gray-500 mt-1">
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs">
-                    <i data-lucide="compass" class="w-3 h-3 mr-1"></i>
+            ? `<div class="mt-2 p-2 bg-blue-50 rounded-md border border-blue-100">
+                <div class="flex items-center text-xs">
+                  <i data-lucide="map-pin" class="w-3 h-3 mr-1 text-blue-500"></i>
+                  <p class="text-gray-600 font-medium truncate">${location.name || 'Không có tên địa điểm'}</p>
+                </div>
+                <p class="text-xs text-gray-500 mt-0.5">
+                  <span class="inline-flex items-center px-1 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs">
+                    <i data-lucide="compass" class="w-2.5 h-2.5 mr-0.5"></i>
                     ${parseFloat(location.lat).toFixed(6)}, ${parseFloat(location.lng).toFixed(6)}
                   </span>
                 </p>
                </div>` 
             : rawLocationDisplay; // Fall back to raw display if parsed location isn't available
         
-        const editButton = `<button class="edit-expense-btn text-blue-600 hover:text-blue-800 mr-2 p-1.5 rounded-full hover:bg-gray-100 transition-colors duration-200" data-id="${expense.id}" title="Chỉnh sửa">
-            <i data-lucide="edit" class="w-4 h-4"></i>
+        // Thu gọn các nút
+        const editButton = `<button class="edit-expense-btn text-blue-600 hover:text-blue-800 mr-1 p-1 rounded-full hover:bg-gray-100 transition-colors duration-200" data-id="${expense.id}" title="Chỉnh sửa">
+            <i data-lucide="edit" class="w-3.5 h-3.5"></i>
         </button>`;
         
-        const deleteButton = `<button class="delete-expense-btn text-red-600 hover:text-red-800 p-1.5 rounded-full hover:bg-red-50 transition-colors duration-200" data-id="${expense.id}" title="Xóa">
-            <i data-lucide="trash-2" class="w-4 h-4"></i>
+        const deleteButton = `<button class="delete-expense-btn text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-50 transition-colors duration-200" data-id="${expense.id}" title="Xóa">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
         </button>`;
         
-        const copyButton = `<button class="copy-expense-btn text-green-600 hover:text-green-800 mr-2 p-1.5 rounded-full hover:bg-green-50 transition-colors duration-200" data-id="${expense.id}" title="Sao chép">
-            <i data-lucide="copy" class="w-4 h-4"></i>
+        const copyButton = `<button class="copy-expense-btn text-green-600 hover:text-green-800 mr-1 p-1 rounded-full hover:bg-green-50 transition-colors duration-200" data-id="${expense.id}" title="Sao chép">
+            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
         </button>`;
         
         // Create a separate badge for the unexpanded view
         const locationBadgeOutside = hasLocation 
-            ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 ml-2 shadow-sm border border-blue-200">
-                <i data-lucide="map-pin" class="w-3 h-3 mr-1 text-blue-500"></i>Vị trí
+            ? `<span class="inline-flex items-center px-1.5 py-0 rounded-full text-xs font-medium bg-blue-100 text-blue-800 ml-1 shadow-sm border border-blue-200">
+                <i data-lucide="map-pin" class="w-2.5 h-2.5 text-blue-500"></i>
                </span>` 
             : '';
         
         item.innerHTML = `
-            <div class="p-4">
+            <div class="p-2">
                 <div class="flex justify-between items-start">
-                    <div>
-                        <h3 class="text-lg font-medium text-gray-900 flex items-center">
-                            ${expense.name}
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center">
+                            <h3 class="text-sm font-medium text-gray-900 truncate mr-1">${expense.name}</h3>
                             ${locationBadge}
-                        </h3>
-                        <p class="text-sm text-gray-600 mt-1">
-                            <span class="inline-flex items-center mr-3">
-                                <i data-lucide="calendar" class="w-3.5 h-3.5 mr-1 text-gray-400"></i>
-                                ${formattedDate}
-                            </span>
-                            <span class="inline-flex items-center">
-                                <i data-lucide="user" class="w-3.5 h-3.5 mr-1 text-gray-400"></i>
-                                <span class="${payerDisplayClass}">${expense.payer}</span>
-                            </span>
-                        </p>
-                        ${timestampHtml}
-                        
-                        <!-- Location preview always visible if exists -->
-                        ${hasLocation ? `
-                        <div class="mt-2 text-sm text-blue-600 flex items-center bg-blue-50 py-1 px-2 rounded-md border border-blue-100 w-fit hover:bg-blue-100 transition-colors cursor-pointer">
-                            <i data-lucide="map-pin" class="w-3.5 h-3.5 mr-1.5 text-blue-500"></i>
-                            <span class="truncate" style="max-width: 250px;">${location.name || 'Địa điểm chi tiêu'}</span>
                         </div>
-                        ` : ''}
+                        <div class="flex items-center text-xs text-gray-600 mt-0.5">
+                            <i data-lucide="calendar" class="w-2.5 h-2.5 mr-0.5 text-gray-400"></i>
+                            <span class="mr-2">${formattedDate}</span>
+                            <i data-lucide="user" class="w-2.5 h-2.5 mr-0.5 text-gray-400"></i>
+                            <span class="${payerDisplayClass} truncate">${expense.payer}</span>
+                        </div>
                     </div>
-                    <div class="text-right">
-                        <p class="text-xl font-bold text-green-600">${formattedAmount}</p>
-                        <p class="text-xs text-gray-500 mt-1 inline-flex items-center justify-end w-full">
-                            <i data-lucide="${equalSplit ? 'split' : 'calculator'}" class="w-3.5 h-3.5 mr-1 ${equalSplit ? 'text-green-500' : 'text-orange-500'}"></i>
+                    <div class="text-right ml-2">
+                        <p class="text-md font-bold text-green-600">${formattedAmount}</p>
+                        <p class="text-xs text-gray-500 inline-flex items-center justify-end">
+                            <i data-lucide="${equalSplit ? 'split' : 'calculator'}" class="w-2.5 h-2.5 mr-0.5 ${equalSplit ? 'text-green-500' : 'text-orange-500'}"></i>
                             ${equalSplit ? 'Chia đều' : 'Chia tay'}
                         </p>
                     </div>
                 </div>
-                <div class="expense-details hidden mt-4 border-t border-gray-100 pt-3">
-                    <p class="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                        <i data-lucide="list-checks" class="w-4 h-4 mr-1.5 text-gray-500"></i>
+                
+                <!-- Location preview - chỉ hiển thị icon nhỏ -->
+                ${hasLocation ? `
+                <div class="mt-1 text-xs text-blue-600 flex items-center bg-blue-50 py-0.5 px-1 rounded border border-blue-100 w-fit hover:bg-blue-100 transition-colors cursor-pointer">
+                    <i data-lucide="map-pin" class="w-2.5 h-2.5 mr-0.5 text-blue-500"></i>
+                    <span class="truncate" style="max-width: 180px;">${location.name || 'Địa điểm chi tiêu'}</span>
+                </div>
+                ` : ''}
+                
+                <div class="expense-details hidden mt-2 border-t border-gray-100 pt-1.5">
+                    <div class="text-xs font-medium text-gray-700 mb-0.5 flex items-center">
+                        <i data-lucide="list-checks" class="w-2.5 h-2.5 mr-0.5 text-gray-500"></i>
                         Chi tiết chia tiền:
-                    </p>
-                    <div class="flex flex-wrap gap-1">
+                    </div>
+                    <div class="flex flex-wrap gap-0.5">
                         ${participantsList}
                     </div>
                     ${locationDetails}
-                    <div class="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
+                    <div class="flex justify-between items-center mt-1.5 pt-1.5 border-t border-gray-100">
                         <div class="flex items-center">
                             ${locationBtn}
                             ${copyButton}
                             ${editButton}
                             ${deleteButton}
                         </div>
-                        <button class="collapse-btn text-gray-600 hover:text-gray-800 p-1.5 rounded-full hover:bg-gray-100 transition-colors duration-200">
-                            <i data-lucide="chevron-up" class="w-5 h-5"></i>
+                        <button class="collapse-btn text-gray-600 hover:text-gray-800 p-1 rounded-full hover:bg-gray-100 transition-colors duration-200">
+                            <i data-lucide="chevron-up" class="w-3.5 h-3.5"></i>
                         </button>
                     </div>
                 </div>
-                <button class="expand-btn text-gray-600 hover:text-gray-800 mt-2 w-full flex justify-center p-1 hover:bg-gray-50 rounded-md transition-colors duration-200">
-                    <i data-lucide="chevron-down" class="w-5 h-5"></i>
+                <button class="expand-btn text-gray-600 hover:text-gray-800 w-full flex justify-center p-0.5 hover:bg-gray-50 rounded transition-colors duration-200">
+                    <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
                 </button>
             </div>
         `;
@@ -2274,24 +2161,8 @@ export class ExpenseUIController extends UIController {
                     detailsSection.classList.remove('hidden');
                     expandBtn.classList.add('hidden');
                     
-                    // Auto-show map if expense has location
-                    if (expense.location && hasLocation) {
-                        let loc = expense.location;
-                        // Parse location if it's a string
-                        if (typeof loc === 'string') {
-                            try {
-                                loc = JSON.parse(loc);
-                            } catch (e) {
-                                console.error('Không thể phân tích dữ liệu vị trí:', e);
-                                return;
-                            }
-                        }
-                        
-                        // Use setTimeout to ensure DOM is updated before showing map
-                        setTimeout(() => {
-                            this.showLocationOnMap(loc, expense.name);
-                        }, 100);
-                    }
+                    // REMOVED: Auto-show map if expense has location
+                    // Không tự động mở map khi mở rộng chi tiêu nữa
                 });
             }
             
@@ -2346,7 +2217,7 @@ export class ExpenseUIController extends UIController {
             }
             
             // Add click event to location preview
-            const locationPreview = item.querySelector('.mt-2.text-sm.text-blue-600');
+            const locationPreview = item.querySelector('.mt-1.text-xs.text-blue-600');
             if (locationPreview && expense.location) {
                 locationPreview.style.cursor = 'pointer';
                 locationPreview.title = 'Nhấp để xem vị trí trên bản đồ';
@@ -2376,7 +2247,7 @@ export class ExpenseUIController extends UIController {
      * This is a temporary fix to diagnose the issue
      */
     showDebugLocationInfo() {
-        console.log("DEBUG - Adding location debug badges to all expenses");
+        console.log("DEBUG - Only logging location data to console (no UI badge)");
         
         // Find all expense items in the DOM
         const expenseItems = document.querySelectorAll('.expense-item');
@@ -2394,27 +2265,7 @@ export class ExpenseUIController extends UIController {
                 locationValue: expense.location
             });
             
-            // Add debug badge
-            const debugBadge = document.createElement('div');
-            debugBadge.className = 'mt-1 p-2 bg-red-100 text-xs';
-            
-            if (expense.location) {
-                const locInfo = typeof expense.location === 'string' 
-                    ? `String: ${expense.location.substring(0, 30)}...` 
-                    : `Object: lat=${expense.location.lat}, lng=${expense.location.lng}, name=${expense.location.name?.substring(0, 30) || 'N/A'}`;
-                
-                debugBadge.innerHTML = `
-                    <strong>DEBUG LOCATION:</strong> ${locInfo}
-                `;
-            } else {
-                debugBadge.textContent = 'DEBUG: No location data';
-            }
-            
-            // Add to expense item
-            const container = item.querySelector('.p-4');
-            if (container) {
-                container.appendChild(debugBadge);
-            }
+            // NO LONGER ADDING DEBUG BADGES TO UI
         });
     }
 
@@ -2431,5 +2282,78 @@ export class ExpenseUIController extends UIController {
             this.map = null;
             this.marker = null;
         }
+    }
+
+    /**
+     * Debug all expenses' location data (for console use)
+     */
+    debugAllExpenseLocations() {
+        const expenses = this.app.expenseManager.getAllExpenses();
+        this.debugLocationData(expenses);
+        
+        console.log("=== Debug commands for expense locations ===");
+        console.log("To force showing the location debug badges on all expense items:");
+        console.log("window.debugExpenseLocations.showBadges()");
+        
+        console.log("\nTo test showing a specific expense location on map:");
+        console.log("window.debugExpenseLocations.showLocationOnMap('expenseId')");
+        
+        console.log("\nTo fix location data for all expenses in memory (not saved to DB):");
+        console.log("window.debugExpenseLocations.fixLocationData()");
+        
+        return {
+            expenses: expenses,
+            showBadges: () => this.showDebugLocationInfo(),
+            showLocationOnMap: (expenseId) => {
+                const expense = this.app.expenseManager.getExpenseById(expenseId);
+                if (expense) {
+                    this.showLocationOnMap(expense.location, expense.name);
+                    return "Showing location for " + expense.name;
+                } else {
+                    return "Expense not found with ID " + expenseId;
+                }
+            },
+            fixLocationData: () => {
+                let fixedCount = 0;
+                expenses.forEach(expense => {
+                    if (expense.location && typeof expense.location === 'string') {
+                        try {
+                            expense.location = JSON.parse(expense.location);
+                            fixedCount++;
+                        } catch (e) {
+                            console.error(`Could not parse location for expense ${expense.id}:`, e);
+                        }
+                    }
+                });
+                return `Fixed ${fixedCount} expenses with string location data`;
+            }
+        };
+    }
+
+    /**
+     * Phương thức này chỉ log debug info về location vào console, không hiển thị UI
+     */
+    showDebugLocationInfo() {
+        console.log("DEBUG - Checking location data for expenses (console only)");
+        
+        // Find all expense items in the DOM
+        const expenseItems = document.querySelectorAll('.expense-item');
+        expenseItems.forEach(item => {
+            const expenseId = item.getAttribute('data-id');
+            if (!expenseId) return;
+            
+            // Find the expense object
+            const expense = this.app.expenseManager.getExpenseById(expenseId);
+            if (!expense) return;
+            
+            // Log location info to console only
+            if (expense.location) {
+                console.log(`Expense ${expenseId} (${expense.name}) has location:`, 
+                    typeof expense.location === 'string' 
+                        ? `String format: ${expense.location.substring(0, 30)}...`
+                        : `Object format: lat=${expense.location.lat}, lng=${expense.location.lng}, name=${expense.location.name || 'N/A'}`
+                );
+            }
+        });
     }
 }

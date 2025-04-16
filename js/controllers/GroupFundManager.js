@@ -143,6 +143,23 @@ export class GroupFundManager {
      */
     async addDeposit(member, amount, date, note = '') {
         try {
+            // Kiểm tra xem đã có giao dịch nộp quỹ tương tự trong vòng 5 giây gần đây
+            const recentTime = new Date();
+            recentTime.setSeconds(recentTime.getSeconds() - 5);
+            
+            const recentDeposits = this.transactions.filter(t => 
+                t.isDeposit() && 
+                t.member === member && 
+                t.amount === amount &&
+                t.created_at && 
+                new Date(t.created_at) > recentTime
+            );
+            
+            if (recentDeposits.length > 0) {
+                console.warn('Phát hiện giao dịch trùng lặp trong vòng 5 giây gần đây, bỏ qua để tránh trùng lặp');
+                return recentDeposits[0]; // Trả về giao dịch đã tồn tại
+            }
+            
             // Add deposit to Supabase
             const savedTransaction = await supabase.addDeposit(member, amount, date, note);
             

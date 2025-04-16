@@ -622,16 +622,60 @@ export class ReportsUIController extends UIController {
      * @param {string} category - The new category
      */
     updateCategoryInCharts(expenseId, category) {
-        // This would be implemented to update charts dynamically
-        // If the category changed after AI analysis
+        // Log the AI categorization for debugging
+        console.log(`AI categorized expense ${expenseId} as "${category}"`);
         
-        // For now, just log that we've updated
-        console.log(`Updated category for expense ${expenseId} to ${category}`);
+        // Show AI categorization status message in UI
+        const statusElement = document.getElementById('ai-categorization-status');
+        if (statusElement) {
+            statusElement.textContent = `AI đã phân loại "${this.getExpenseName(expenseId)}" thành "${category}"`;
+            statusElement.classList.remove('hidden');
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                statusElement.classList.add('hidden');
+            }, 5000);
+        }
         
-        // In a real implementation, you might want to:
-        // 1. Check if this is a different category than before
-        // 2. Update the chart data
-        // 3. Re-render the chart with new data
+        // If the chart exists, update it with the new category data
+        if (this.generalCategoryChart) {
+            // Rebuild the category data with the updated category
+            if (this.currentGeneralReportData && this.currentGeneralReportData.expenses) {
+                // Create a new category mapping using the latest AI results
+                const categories = {};
+                
+                // Use cached categories for all expenses
+                this.currentGeneralReportData.expenses.forEach(expense => {
+                    const expenseNameLower = expense.name.toLowerCase();
+                    if (this.categoryCache && this.categoryCache[expenseNameLower]) {
+                        categories[expense.id] = this.categoryCache[expenseNameLower];
+                    } else {
+                        categories[expense.id] = 'Khác'; // Fallback if not in cache
+                    }
+                });
+                
+                // Update category amounts with new mapping
+                const updatedCategoryAmounts = this.aggregateByCategory(this.currentGeneralReportData.expenses, categories);
+                
+                // Re-draw chart with updated data
+                this.drawCategoryChart(updatedCategoryAmounts);
+            }
+        }
+    }
+    
+    /**
+     * Get expense name by id for display purposes
+     * @param {string} expenseId - The expense ID to look up
+     * @returns {string} - The expense name or a placeholder
+     */
+    getExpenseName(expenseId) {
+        if (this.currentGeneralReportData && this.currentGeneralReportData.expenses) {
+            const expense = this.currentGeneralReportData.expenses.find(e => e.id === expenseId);
+            if (expense) {
+                return expense.name;
+            }
+        }
+        return 'Chi tiêu';
     }
     
     /**
@@ -662,6 +706,21 @@ export class ReportsUIController extends UIController {
         const loadingIndicator = document.getElementById('category-chart-loading');
         if (loadingIndicator) loadingIndicator.classList.remove('hidden');
         
+        // Hide any previous AI status messages
+        const statusElement = document.getElementById('ai-categorization-status');
+        if (statusElement) {
+            statusElement.classList.add('hidden');
+        }
+        
+        // Add IDs to expenses if they don't have them (for tracking in categorization)
+        expenses.forEach((expense, index) => {
+            if (!expense.id) {
+                expense.id = `expense_${index}`;
+            }
+        });
+        
+        console.log('Bắt đầu phân loại chi tiêu với AI...');
+        
         // Initialize with fallback categorization first for quick display
         const initialCategories = {};
         expenses.forEach(expense => {
@@ -673,16 +732,35 @@ export class ReportsUIController extends UIController {
         const categoryAmounts = this.aggregateByCategory(expenses, initialCategories);
         
         // Draw initial chart
-        this.drawCategoryChart(categoryAmounts);
+        this.drawCategoryChart(categoryAmounts, 'Phân loại chi tiêu (tạm thời)');
         
         // Then run AI categorization asynchronously and update if needed
         this.categorizeExpenses(expenses).then(aiCategories => {
             // Aggregate with AI categories
             const updatedCategoryAmounts = this.aggregateByCategory(expenses, aiCategories);
             
+            console.log('Đã hoàn thành phân loại chi tiêu với AI');
+            
+            // Count how many were categorized by AI vs fallback
+            const aiCategorized = expenses.filter(e => {
+                const expenseName = e.name.toLowerCase();
+                return this.categoryCache[expenseName] && 
+                      !this.isFallbackCategory(expenseName, this.categoryCache[expenseName]);
+            }).length;
+            
             // Update chart if categories changed
             if (JSON.stringify(categoryAmounts) !== JSON.stringify(updatedCategoryAmounts)) {
-                this.drawCategoryChart(updatedCategoryAmounts);
+                // Update chart title to show AI categorization
+                this.drawCategoryChart(
+                    updatedCategoryAmounts, 
+                    `Phân loại chi tiêu (AI: ${aiCategorized}/${expenses.length})`
+                );
+                
+                // Update status to show AI categorization count
+                if (statusElement) {
+                    statusElement.textContent = `AI đã phân loại ${aiCategorized} chi tiêu (${Math.round(aiCategorized/expenses.length*100)}%)`;
+                    statusElement.classList.remove('hidden');
+                }
             }
             
             // Hide loading indicator
@@ -691,10 +769,57 @@ export class ReportsUIController extends UIController {
             console.error('Error with AI categorization:', error);
             // Hide loading indicator
             if (loadingIndicator) loadingIndicator.classList.add('hidden');
+            
+            // Show error status
+            if (statusElement) {
+                statusElement.textContent = `Lỗi khi phân loại với AI: ${error.message}`;
+                statusElement.classList.remove('hidden');
+                statusElement.classList.add('bg-red-50', 'text-red-600', 'border-red-100');
+            }
         });
         
         // Continue with time-based chart which doesn't depend on categories
         this.renderTimeChart(expenses);
+    }
+    
+    /**
+     * Check if a category was determined by fallback logic
+     * @param {string} expenseName - The expense name
+     * @param {string} category - The category
+     * @returns {boolean} - Whether this was from fallback logic
+     */
+    isFallbackCategory(expenseName, category) {
+        // Check if this category would be assigned by the fallback logic
+        const expenseNameLower = expenseName.toLowerCase();
+        
+        if (category === 'Ăn uống' && 
+            (expenseNameLower.includes('ăn') || expenseNameLower.includes('cafe') || 
+             expenseNameLower.includes('cà phê') || expenseNameLower.includes('trà') || 
+             expenseNameLower.includes('đồ uống') || expenseNameLower.includes('nhà hàng'))) {
+            return true;
+        } 
+        
+        if (category === 'Đi lại' && 
+            (expenseNameLower.includes('xe') || expenseNameLower.includes('taxi') || 
+             expenseNameLower.includes('grab') || expenseNameLower.includes('di chuyển') || 
+             expenseNameLower.includes('đi lại') || expenseNameLower.includes('xăng'))) {
+            return true;
+        }
+        
+        if (category === 'Giải trí' && 
+            (expenseNameLower.includes('giải trí') || expenseNameLower.includes('phim') || 
+             expenseNameLower.includes('game') || expenseNameLower.includes('du lịch') || 
+             expenseNameLower.includes('chơi') || expenseNameLower.includes('tiệc'))) {
+            return true;
+        }
+        
+        if (category === 'Khác' && 
+           !expenseNameLower.match(/(ăn|cafe|cà phê|trà|đồ uống|nhà hàng|xe|taxi|grab|di chuyển|đi lại|xăng|giải trí|phim|game|du lịch|chơi|tiệc)/)) {
+            return true;
+        }
+        
+        // If we got here, the category was likely determined by AI
+        return false;
     }
     
     /**
@@ -721,8 +846,9 @@ export class ReportsUIController extends UIController {
     /**
      * Draw category chart
      * @param {Object} categoryAmounts - Categories with amounts
+     * @param {string} title - Chart title
      */
-    drawCategoryChart(categoryAmounts) {
+    drawCategoryChart(categoryAmounts, title = 'Phân loại chi tiêu') {
         // Chuẩn bị dữ liệu cho biểu đồ phân loại
         const categoryLabels = Object.keys(categoryAmounts);
         const categoryData = categoryLabels.map(cat => categoryAmounts[cat]);
@@ -753,7 +879,7 @@ export class ReportsUIController extends UIController {
                 categoryData, 
                 categoryLabels, 
                 categoryColors, 
-                'Phân loại chi tiêu'
+                title
             );
         }
     }

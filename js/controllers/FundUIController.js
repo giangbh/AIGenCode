@@ -432,17 +432,14 @@ export class FundUIController extends UIController {
         try {
             // Hiển thị trạng thái đang xử lý
             const submitBtn = this.depositForm.querySelector('button[type="submit"]');
-            const originalBtnText = submitBtn.textContent;
             submitBtn.disabled = true;
             submitBtn.textContent = 'Đang xử lý...';
             
-            // Add deposit
+            // Add deposit - tất cả thao tác cập nhật trạng thái và cơ sở dữ liệu
+            // sẽ được thực hiện trong hàm addDeposit
             const transaction = await this.app.fundManager.addDeposit(member, amount, date, note);
             
-            // Các bước sau này đã được xử lý trong hàm addDeposit
-            // KHÔNG cần tải lại dữ liệu, vì điều đó sẽ gây trùng lặp!
-            
-            // Cập nhật giao diện trực tiếp mà không cần tải lại dữ liệu
+            // Chỉ cập nhật UI mà không tải lại dữ liệu
             this.renderFundStatus();
             this.renderFundTransactions();
             
@@ -455,6 +452,7 @@ export class FundUIController extends UIController {
             
             showMessage(`${member} đã nộp ${formatCurrency(amount)} vào quỹ nhóm`);
         } catch (error) {
+            console.error('Lỗi khi thêm khoản nộp quỹ:', error);
             showMessage(`Lỗi khi thêm khoản nộp quỹ: ${error.message}`, 'error');
         } finally {
             // Khôi phục trạng thái nút

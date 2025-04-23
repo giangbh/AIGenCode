@@ -1353,11 +1353,21 @@ export class ExpenseUIController extends UIController {
         
         results.transactions.forEach(transaction => {
             const li = document.createElement('li');
-            li.className = 'py-1 border-b border-gray-100';
+            li.className = 'py-2 border-b border-gray-100 flex flex-wrap items-center justify-between';
             
+            // Transaction description container
+            const transactionDesc = document.createElement('div');
+            transactionDesc.className = 'flex-1';
+            transactionDesc.innerHTML = `<span class="font-medium">${transaction.from}</span> chuyển <span class="font-semibold text-green-600">${formatCurrency(transaction.amount)}</span> cho <span class="font-medium">${transaction.to}</span>`;
+            
+            // Button container
+            const buttonContainer = document.createElement('div');
+            buttonContainer.className = 'flex space-x-2 mt-1 sm:mt-0';
+            
+            // QR Code button
             const qrBtn = document.createElement('button');
             qrBtn.type = 'button';
-            qrBtn.className = 'qr-link ml-2 text-blue-600 hover:text-blue-800 text-xs';
+            qrBtn.className = 'qr-link text-blue-600 hover:text-blue-800 text-xs px-2 py-1 border border-blue-200 rounded-md flex items-center';
             qrBtn.dataset.debtor = transaction.from;
             qrBtn.dataset.creditor = transaction.to;
             qrBtn.dataset.amount = transaction.amount;
@@ -1373,18 +1383,81 @@ export class ExpenseUIController extends UIController {
                 qrBtn.setAttribute('disabled', 'disabled');
             }
             
-            li.innerHTML = `<span class="font-medium">${transaction.from}</span> chuyển <span class="font-semibold text-green-600">${formatCurrency(transaction.amount)}</span> cho <span class="font-medium">${transaction.to}</span>`;
-            li.appendChild(qrBtn);
+            // Confirm/Transfer button
+            const confirmBtn = document.createElement('button');
+            confirmBtn.type = 'button';
+            confirmBtn.className = 'text-white bg-green-600 hover:bg-green-700 text-xs px-2 py-1 rounded-md flex items-center transition duration-150 ease-in-out';
+            confirmBtn.innerHTML = '<i data-lucide="check" class="w-3 h-3 mr-1"></i>Xác nhận';
+            confirmBtn.dataset.from = transaction.from;
+            confirmBtn.dataset.to = transaction.to;
+            confirmBtn.dataset.amount = transaction.amount;
+            confirmBtn.addEventListener('click', (e) => {
+                this.handleConfirmTransfer(e.currentTarget);
+            });
+            
+            // Add buttons to container
+            buttonContainer.appendChild(qrBtn);
+            buttonContainer.appendChild(confirmBtn);
+            
+            // Add elements to list item
+            li.appendChild(transactionDesc);
+            li.appendChild(buttonContainer);
             
             transactionsEl.appendChild(li);
         });
         
-        // Initialize icons for the QR buttons
+        // Initialize icons for the buttons
         lucide.createIcons({
             attrs: {
                 class: 'w-3 h-3'
             }
         });
+    }
+
+    /**
+     * Handle click on confirm/transfer button
+     * @param {HTMLElement} button - The button that was clicked
+     */
+    async handleConfirmTransfer(button) {
+        const fromMember = button.dataset.from;
+        const toMember = button.dataset.to;
+        const amount = parseFloat(button.dataset.amount);
+        
+        if (!fromMember || !toMember || isNaN(amount)) {
+            showMessage('Dữ liệu giao dịch không hợp lệ', 'error');
+            return;
+        }
+        
+        try {
+            // Disable button and show loading state
+            button.disabled = true;
+            const originalText = button.innerHTML;
+            button.innerHTML = '<i data-lucide="loader" class="w-3 h-3 mr-1 animate-spin"></i>Đang xử lý...';
+            lucide.createIcons();
+            
+            // Process the transfer
+            await this.app.fundManager.transferBetweenMembers(fromMember, toMember, amount);
+            
+            // Show success message
+            showMessage(`Đã chuyển ${formatCurrency(amount)} từ ${fromMember} cho ${toMember}`, 'success');
+            
+            // Update button to indicate completion
+            button.className = 'text-white bg-gray-400 text-xs px-2 py-1 rounded-md flex items-center';
+            button.innerHTML = '<i data-lucide="check-circle" class="w-3 h-3 mr-1"></i>Đã hoàn thành';
+            button.disabled = true;
+            lucide.createIcons();
+            
+            // Update any balance displays
+            this.updateAllFundBalanceDisplays();
+        } catch (error) {
+            // Restore button state
+            button.disabled = false;
+            button.innerHTML = originalText;
+            lucide.createIcons();
+            
+            // Show error message
+            showMessage(`Lỗi: ${error.message}`, 'error');
+        }
     }
 
     /**

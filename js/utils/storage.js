@@ -164,5 +164,5 @@ export function invalidateCache(type) {
     }
 }
 
-// Exporting supabase client
+// Export supabase for direct access
 export const supabase = supabaseClient; 

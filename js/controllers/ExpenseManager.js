@@ -84,9 +84,31 @@ export class ExpenseManager {
             const expense = Expense.fromObject(savedExpense);
             this.expenses.push(expense);
             
-            // If group fund is the payer, update fund balance
             if (expense.payer === this.GROUP_FUND_PAYER_ID) {
+                // If group fund is the payer, just handle fund expense
                 await this._handleGroupFundPayment(expense);
+            } else {
+                // For non-fund payers, implement new approach:
+                // 1. First, add deposit from payer to fund
+                const depositTransaction = FundTransaction.createDeposit(
+                    expense.payer,
+                    expense.amount,
+                    expense.date,
+                    `Đóng quỹ (tự động) để chi trả khoản: ${expense.name}`
+                );
+                
+                // Add deposit transaction (increases fund balance)
+                await this.fundManager.addTransaction(depositTransaction);
+                
+                // 2. Then, create an expense from fund for all participants
+                // Create a temporary expense with fund as payer to reuse existing method
+                const fundExpense = new Expense({
+                    ...expense.toObject(),
+                    payer: this.GROUP_FUND_PAYER_ID
+                });
+                
+                // Handle fund expense (decreases fund balance)
+                await this._handleGroupFundPayment(fundExpense);
             }
             
             // Invalidate cache
@@ -135,27 +157,56 @@ export class ExpenseManager {
         }
         
         try {
-            // Update fund balance if payer changed
-            if (oldExpense.payer === this.GROUP_FUND_PAYER_ID && 
-                newData.payer !== this.GROUP_FUND_PAYER_ID) {
-                // Old payer was group fund, new payer is not - refund the group fund
+            // Step 1: Handle old expense fund-related transactions
+            if (oldExpense.payer === this.GROUP_FUND_PAYER_ID) {
+                // Old payer was group fund, refund the fund
                 await this._handleGroupFundRefund(oldExpense);
-            } 
-            else if (oldExpense.payer !== this.GROUP_FUND_PAYER_ID && 
-                     newData.payer === this.GROUP_FUND_PAYER_ID) {
-                // Create new expense object for payment handling
+            } else {
+                // Old payer was not group fund, need to remove both deposit and expense transactions
+                // First locate and remove the expense transaction from the fund
+                await this.fundManager.removeExpenseTransaction(oldExpense.id);
+                
+                // Then remove the deposit transaction from the payer
+                // This is more complex because deposit transactions aren't directly linked to expenses
+                // We need to find transactions with matching dates and amounts
+                await this.fundManager.removeDepositForExpense(
+                    oldExpense.payer, 
+                    oldExpense.amount, 
+                    oldExpense.date,
+                    `Đóng quỹ (tự động) để chi trả khoản: ${oldExpense.name}`
+                );
+            }
+            
+            // Step 2: Create new fund transactions
+            if (newData.payer === this.GROUP_FUND_PAYER_ID) {
+                // New payer is group fund - just handle as a normal fund expense
                 const tempExpense = new Expense({
                     ...newData,
                     id: oldExpense.id
                 });
                 
-                // Old payer was not group fund, new payer is - deduct from fund
                 await this._handleGroupFundPayment(tempExpense);
-            }
-            else if (oldExpense.payer === this.GROUP_FUND_PAYER_ID && 
-                     newData.payer === this.GROUP_FUND_PAYER_ID) {
-                // Both old and new payer are group fund, adjust for amount difference
-                await this._handleGroupFundUpdate(oldExpense, newData);
+            } else {
+                // New payer is not group fund - implement the new approach
+                // 1. Add deposit from new payer to fund
+                const depositTransaction = FundTransaction.createDeposit(
+                    newData.payer,
+                    newData.amount,
+                    newData.date || new Date().toISOString().split('T')[0],
+                    `Đóng quỹ (tự động) để chi trả khoản: ${newData.name}`
+                );
+                
+                // Add deposit transaction (increases fund balance)
+                await this.fundManager.addTransaction(depositTransaction);
+                
+                // 2. Create expense from fund for all participants
+                const fundExpense = new Expense({
+                    ...newData,
+                    id: oldExpense.id,
+                    payer: this.GROUP_FUND_PAYER_ID
+                });
+                
+                await this._handleGroupFundPayment(fundExpense);
             }
             
             // Update the expense in Supabase
@@ -189,9 +240,21 @@ export class ExpenseManager {
         const expense = this.expenses[index];
         
         try {
-            // If the expense was paid by the group fund, restore the balance
+            // If the expense was paid by the group fund, just restore the balance
             if (expense.payer === this.GROUP_FUND_PAYER_ID) {
                 await this._handleGroupFundRefund(expense);
+            } else {
+                // For non-fund payers with the new approach, we need to undo both transactions
+                // First remove the expense transaction from the fund
+                await this.fundManager.removeExpenseTransaction(expense.id);
+                
+                // Then remove the deposit that was automatically created
+                await this.fundManager.removeDepositForExpense(
+                    expense.payer,
+                    expense.amount,
+                    expense.date,
+                    `Đóng quỹ (tự động) để chi trả khoản: ${expense.name}`
+                );
             }
             
             // Delete expense from Supabase
@@ -216,98 +279,12 @@ export class ExpenseManager {
      * @returns {Object} Calculation results
      */
     calculateResults(members) {
-        if (this.expenses.length === 0) {
-            return {
-                balances: {},
-                transactions: [],
-                hasNonFundExpenses: false
-            };
-        }
-        
-        // Calculate how much each person paid and owes
-        const balances = {};
-        members.forEach(member => balances[member] = { paid: 0, owes: 0, net: 0 });
-        
-        // Process all expenses
-        let hasNonFundExpenses = false;
-        
-        this.expenses.forEach(expense => {
-            const amount = expense.amount;
-            
-            // Skip group fund expenses for settlement calculations
-            if (expense.payer === this.GROUP_FUND_PAYER_ID) {
-                return; // Skip this expense - it's paid from the group fund
-            }
-            
-            hasNonFundExpenses = true;
-            
-            // Add what the payer paid
-            balances[expense.payer].paid += amount;
-            
-            // Add what each participant owes
-            if (expense.equalSplit) {
-                const equalSplit = amount / expense.participants.length;
-                expense.participants.forEach(participant => {
-                    balances[participant].owes += equalSplit;
-                });
-            } else {
-                // For manual splits
-                Object.entries(expense.splits).forEach(([participant, amount]) => {
-                    balances[participant].owes += amount;
-                });
-            }
-        });
-        
-        // Calculate net balances
-        members.forEach(member => {
-            balances[member].net = balances[member].paid - balances[member].owes;
-        });
-        
-        // Calculate transactions if there are non-fund expenses
-        const transactions = [];
-        
-        if (hasNonFundExpenses) {
-            // Make copies for calculation
-            const creditors = members.filter(m => balances[m].net > 0)
-                .map(member => ({
-                    name: member,
-                    amount: balances[member].net
-                }))
-                .sort((a, b) => b.amount - a.amount);
-                
-            const debtors = members.filter(m => balances[m].net < 0)
-                .map(member => ({
-                    name: member,
-                    amount: -balances[member].net
-                }))
-                .sort((a, b) => b.amount - a.amount);
-            
-            // Calculate settlement transactions
-            while (creditors.length > 0 && debtors.length > 0) {
-                const creditor = creditors[0];
-                const debtor = debtors[0];
-                
-                const amount = Math.min(creditor.amount, debtor.amount);
-                
-                transactions.push({
-                    from: debtor.name,
-                    to: creditor.name,
-                    amount: amount,
-                    formattedAmount: formatCurrency(amount)
-                });
-                
-                creditor.amount -= amount;
-                debtor.amount -= amount;
-                
-                if (creditor.amount < 1) creditors.shift();
-                if (debtor.amount < 1) debtors.shift();
-            }
-        }
-        
+        // We don't need to calculate who owes whom anymore as everything is handled
+        // through the group fund directly. Return empty results.
         return {
-            balances,
-            transactions,
-            hasNonFundExpenses
+            balances: {},
+            transactions: [],
+            hasNonFundExpenses: false
         };
     }
     
@@ -367,26 +344,6 @@ export class ExpenseManager {
         
         // Delete any fund transaction associated with this expense
         await this.fundManager.removeExpenseTransaction(expense.id);
-    }
-    
-    /**
-     * Handle group fund update when amount changes but payer stays as group fund
-     * @private
-     * @param {Expense} oldExpense - The original expense
-     * @param {Object} newData - The updated expense data
-     */
-    async _handleGroupFundUpdate(oldExpense, newData) {
-        // First refund the old expense
-        await this._handleGroupFundRefund(oldExpense);
-        
-        // Then create a new expense with the new data
-        const tempExpense = new Expense({
-            ...newData,
-            id: oldExpense.id
-        });
-        
-        // Handle payment with new amount
-        await this._handleGroupFundPayment(tempExpense);
     }
     
     /**

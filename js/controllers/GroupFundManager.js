@@ -434,4 +434,117 @@ export class GroupFundManager {
         // and all transactions have been deleted from Supabase
         invalidateCache('fundTransactions');
     }
+    
+    /**
+     * Process a transfer between members
+     * @param {string} fromMember - Member sending money
+     * @param {string} toMember - Member receiving money
+     * @param {number} amount - Amount to transfer
+     * @param {string} [note] - Optional note
+     * @returns {FundTransaction} The new transaction
+     */
+    async transferBetweenMembers(fromMember, toMember, amount, note = '') {
+        try {
+            // Create date string for today
+            const today = new Date();
+            const date = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+            
+            // Create a new transfer transaction
+            const transaction = FundTransaction.createTransfer(
+                fromMember,
+                toMember,
+                amount,
+                date,
+                note || `Chuyển tiền từ ${fromMember} đến ${toMember}`
+            );
+            
+            // Add transfer to Supabase
+            const savedTransaction = await supabase.addTransfer(
+                fromMember,
+                toMember,
+                amount,
+                date,
+                transaction.note
+            );
+            
+            // Update transaction ID
+            transaction.id = savedTransaction.id;
+            
+            // Update local member balances
+            this.memberBalances[fromMember] = (this.memberBalances[fromMember] || 0) - amount;
+            this.memberBalances[toMember] = (this.memberBalances[toMember] || 0) + amount;
+            
+            // Update balances in Supabase
+            await Promise.all([
+                supabase.updateMemberBalance(fromMember, this.memberBalances[fromMember], transaction.id),
+                supabase.updateMemberBalance(toMember, this.memberBalances[toMember], transaction.id)
+            ]);
+            
+            // Add to local transactions
+            this.transactions.push(transaction);
+            
+            // Invalidate cache
+            invalidateCache('fundTransactions');
+            
+            return transaction;
+        } catch (error) {
+            console.error('Lỗi khi thực hiện chuyển tiền:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Remove a deposit transaction related to an expense
+     * @param {string} member - Member who made the deposit
+     * @param {number} amount - Amount of the deposit
+     * @param {string} date - Date of the deposit
+     * @param {string} noteContent - Content of the note that needs to be matched
+     * @returns {boolean} True if successful
+     */
+    async removeDepositForExpense(member, amount, date, noteContent) {
+        try {
+            // Find matching deposit transaction
+            const transaction = this.transactions.find(t => 
+                t.isDeposit() && 
+                t.member === member && 
+                t.amount === amount && 
+                t.date === date &&
+                t.note.includes(noteContent)
+            );
+            
+            if (!transaction) {
+                console.warn('Không tìm thấy giao dịch nộp quỹ phù hợp để xóa');
+                return false;
+            }
+            
+            // Update fund balance locally
+            this.balance -= transaction.amount;
+            
+            // Update member balance locally
+            this.memberBalances[member] -= transaction.amount;
+            
+            // Remove transaction from Supabase
+            await supabase.removeTransaction(transaction.id);
+            
+            // Cập nhật số dư quỹ trong database
+            await supabase.updateFundBalance(this.balance);
+            
+            // Cập nhật số dư thành viên trong database
+            await supabase.updateMemberBalance(member, this.memberBalances[member]);
+            
+            // Remove from local transactions
+            const index = this.transactions.findIndex(t => t.id === transaction.id);
+            if (index !== -1) {
+                this.transactions.splice(index, 1);
+            }
+            
+            // Invalidate cache
+            invalidateCache('fundTransactions');
+            
+            return true;
+        } catch (error) {
+            console.error('Lỗi khi xóa giao dịch nộp quỹ:', error);
+            return false;
+        }
+    }
 } 

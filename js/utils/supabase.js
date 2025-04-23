@@ -358,7 +358,8 @@ export async function getFundTransactions() {
         member: transaction.member,
         note: transaction.note,
         expenseId: transaction.expense_id,
-        expenseName: transaction.expense_name
+        expenseName: transaction.expense_name,
+        created_at: transaction.created_at
     }));
 }
 
@@ -852,7 +853,60 @@ export async function markMemberNotified(memberName) {
     return data;
 }
 
+/**
+ * Add transfer transaction between members
+ * @param {string} fromMember - Member sending money
+ * @param {string} toMember - Member receiving money
+ * @param {number} amount - Amount to transfer
+ * @param {string} date - Date of transfer
+ * @param {string} note - Optional note
+ * @returns {Promise<Object>} The created transaction
+ */
+export async function addTransfer(fromMember, toMember, amount, date, note = '') {
+    const { data, error } = await supabase
+        .from('fund_transactions')
+        .insert([
+            {
+                type: 'transfer',
+                amount: amount,
+                date: date,
+                fromMember: fromMember,
+                toMember: toMember,
+                note: note || `Chuyển tiền từ ${fromMember} đến ${toMember}`
+            }
+        ])
+        .select();
+    
+    if (error) {
+        console.error('Lỗi khi thêm giao dịch chuyển tiền:', error);
+        throw new Error(`Không thể thêm giao dịch chuyển tiền: ${error.message}`);
+    }
+    
+    return data[0];
+}
+
+/**
+ * Remove a specific transaction by ID
+ * @param {string} id - Transaction ID to remove
+ * @returns {Promise<boolean>} True if successful
+ */
+export async function removeTransaction(id) {
+    const { error } = await supabase
+        .from('fund_transactions')
+        .delete()
+        .eq('id', id);
+    
+    if (error) {
+        console.error('Lỗi khi xóa giao dịch:', error);
+        throw new Error(`Không thể xóa giao dịch: ${error.message}`);
+    }
+    
+    return true;
+}
+
+// Default export
 export default {
+    supabase,
     getMembers,
     addMember,
     updateMember,
@@ -876,5 +930,7 @@ export default {
     updateMemberBalance,
     getMembersNeedingNotification,
     updateNotificationThreshold,
-    markMemberNotified
+    markMemberNotified,
+    addTransfer,
+    removeTransaction
 }; 

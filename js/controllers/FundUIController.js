@@ -484,9 +484,9 @@ export class FundUIController extends UIController {
         }
         this.groupFundTransactionsLogDiv.innerHTML = '';
         
-        // Sort transactions by date, most recent first
+        // Sort transactions by created_at, most recent first
         const sortedTransactions = [...transactions].sort((a, b) => 
-            new Date(b.date) - new Date(a.date)
+            new Date(b.created_at) - new Date(a.created_at)
         );
         
         // Pagination setup

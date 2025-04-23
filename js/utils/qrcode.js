@@ -53,22 +53,17 @@ export const displayQrCode = (debtor, creditor, amount, bankAccounts, bankCode =
     // Parse amount to ensure it's a number
     const amountValue = parseFloat(amount);
     
-    // Get account number for creditor
-    const accountNumber = creditor in bankAccounts ? bankAccounts[creditor] : '';
+    // Always use Toan.LV's account number regardless of creditor
+    const accountNumber = '1240067256';
     
     // Build instruction text
     const instruction = `${debtor} cần chuyển ${formatCurrency(amountValue)} cho ${creditor}`;
     qrInstruction.textContent = instruction;
     
     // Generate QR Code using the provided endpoint
-    if (accountNumber) {
-        const description = `${debtor} chuyen tien cho ${creditor}`;
-        const qrUrl = `https://qr.sepay.vn/img?acc=${accountNumber}&bank=${bankCode}&amount=${amountValue}&des=${encodeURIComponent(description)}&template=compact&download=false`;
-        qrCodeImage.src = qrUrl;
-    } else {
-        // Fallback in case account number is not available
-        qrCodeImage.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=No%20Account%20Number';
-    }
+    const description = `${debtor} chuyen tien cho ${creditor}`;
+    const qrUrl = `https://qr.sepay.vn/img?acc=${accountNumber}&bank=${bankCode}&amount=${amountValue}&des=${encodeURIComponent(description)}&template=compact&download=false`;
+    qrCodeImage.src = qrUrl;
     
     showQrModal();
 }; 

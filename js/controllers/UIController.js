@@ -106,7 +106,6 @@ export class UIController {
      * @param {number} amount - The amount to transfer
      */
     showQrCode(debtor, creditor, amount) {
-        const bankAccounts = this.app.memberManager.getAllBankAccounts();
-        displayQrCode(debtor, creditor, amount, bankAccounts);
+        displayQrCode(debtor, creditor, amount);
     }
 } 

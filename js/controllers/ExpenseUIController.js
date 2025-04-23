@@ -175,8 +175,9 @@ export class ExpenseUIController extends UIController {
         if (this.quickDepositBtn) {
             this.quickDepositBtn.addEventListener('click', () => {
                 // Assign default member for quick deposit - can be adjusted as needed
-                const defaultMember = this.app.memberManager.getAllMembers()[0] || 'Toàn';
-                this.showQrCode('', defaultMember, 1000000);
+                const defaultMember = this.app.memberManager.getAllMembers()[0] || 'Toan.LV';
+                this.showQrCode('', 'Toan.LV', 1000000);
+                
             });
         }
         

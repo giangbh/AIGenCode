@@ -926,7 +926,12 @@ export class ExpenseUIController extends UIController {
      * @param {string} expenseId - The expense ID to edit
      */
     handleEditExpense(expenseId) {
+        console.log('handleEditExpense called with ID:', expenseId);
+        console.log('All expenses:', this.app.expenseManager.getAllExpenses().length);
+        
         const expense = this.app.expenseManager.getExpenseById(expenseId);
+        console.log('Found expense:', expense ? 'Yes' : 'No', expense);
+        
         if (!expense) {
             showMessage('Không tìm thấy chi tiêu', 'error');
             return;
@@ -937,7 +942,7 @@ export class ExpenseUIController extends UIController {
         // Set form values
         this.editExpenseIdInput.value = expense.id;
         this.expenseNameInput.value = expense.name;
-        this.expenseAmountInput.value = formatAmountInput(expense.amount);
+        this.expenseAmountInput.value = formatAmountInput(String(expense.amount));
         this.expenseDateInput.value = expense.date;
         this.payerSelect.value = expense.payer;
         
@@ -2114,7 +2119,7 @@ export class ExpenseUIController extends UIController {
             
         // Location button for detailed view
         const locationBtn = hasLocation 
-            ? `<button class="view-location-btn text-blue-600 hover:text-blue-800 flex items-center mr-2 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors duration-200" data-id="${expense.id}">
+            ? `<button type="button" class="view-location-btn text-blue-600 hover:text-blue-800 flex items-center mr-2 px-2 py-1 rounded hover:bg-blue-50 transition-colors duration-200 z-10" data-id="${expense.id}">
                 <i data-lucide="map-pin" class="w-3 h-3 mr-1"></i>
                 Vị trí
                </button>` 
@@ -2137,22 +2142,26 @@ export class ExpenseUIController extends UIController {
             : rawLocationDisplay; // Fall back to raw display if parsed location isn't available
         
         // Thu gọn các nút
-        const editButton = `<button class="edit-expense-btn text-blue-600 hover:text-blue-800 mr-1 p-1 rounded-full hover:bg-gray-100 transition-colors duration-200" data-id="${expense.id}" title="Chỉnh sửa">
-            <i data-lucide="edit" class="w-3.5 h-3.5"></i>
+        const editButton = `<button type="button" class="edit-expense-btn text-blue-600 hover:text-blue-800 mr-1 p-2 rounded hover:bg-blue-100 transition-colors duration-200 flex items-center z-10" data-id="${expense.id}" title="Chỉnh sửa">
+            <i data-lucide="edit" class="w-3.5 h-3.5 mr-1"></i>
+            <span class="text-xs">Sửa</span>
         </button>`;
         
-        const deleteButton = `<button class="delete-expense-btn text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-50 transition-colors duration-200" data-id="${expense.id}" title="Xóa">
-            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+        const deleteButton = `<button type="button" class="delete-expense-btn text-red-600 hover:text-red-800 p-2 rounded hover:bg-red-50 transition-colors duration-200 flex items-center z-10" data-id="${expense.id}" title="Xóa">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5 mr-1"></i>
+            <span class="text-xs">Xóa</span>
         </button>`;
         
-        const copyButton = `<button class="copy-expense-btn text-green-600 hover:text-green-800 mr-1 p-1 rounded-full hover:bg-green-50 transition-colors duration-200" data-id="${expense.id}" title="Sao chép">
-            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+        const copyButton = `<button type="button" class="copy-expense-btn text-green-600 hover:text-green-800 mr-1 p-2 rounded hover:bg-green-50 transition-colors duration-200 flex items-center z-10" data-id="${expense.id}" title="Sao chép">
+            <i data-lucide="copy" class="w-3.5 h-3.5 mr-1"></i>
+            <span class="text-xs">Sao chép</span>
         </button>`;
         
         // Tạo phiên bản compact để hiển thị ngoài không gian thu gọn
         const compactLocationBtn = hasLocation 
-            ? `<button class="view-location-btn text-blue-600 hover:text-blue-800 mr-1 p-1 rounded-full hover:bg-blue-50 transition-colors duration-200" data-id="${expense.id}" title="Xem vị trí">
-                <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
+            ? `<button type="button" class="view-location-btn text-blue-600 hover:text-blue-800 p-2 rounded hover:bg-blue-50 transition-colors duration-200 flex items-center z-10" data-id="${expense.id}" title="Xem vị trí">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5 mr-1"></i>
+                <span class="text-xs">Vị trí</span>
               </button>` 
             : '';
         
@@ -2197,7 +2206,7 @@ export class ExpenseUIController extends UIController {
                 
                 <!-- Các nút tương tác - hiển thị luôn không cần expand -->
                 <div class="flex justify-between items-center mt-1 border-t border-gray-100 pt-1">
-                    <div class="flex items-center">
+                    <div class="flex items-center space-x-1">
                         ${compactLocationBtn}
                         ${copyButton}
                         ${editButton}
@@ -2258,48 +2267,70 @@ export class ExpenseUIController extends UIController {
                 });
             }
             
-            // Edit button
-            const editBtn = item.querySelector('.edit-expense-btn');
-            if (editBtn) {
-                editBtn.addEventListener('click', () => {
+            // Edit button - Try a direct approach without event delegation
+            const editBtns = item.querySelectorAll('.edit-expense-btn');
+            console.log(`Found ${editBtns.length} edit buttons for expense ${expense.id}`);
+            editBtns.forEach(btn => {
+                console.log('Adding click listener to edit button', btn);
+                btn.onclick = (e) => {
+                    console.log('Edit button clicked (direct handler) for expense:', expense.id);
+                    e.preventDefault();
+                    e.stopPropagation();
                     this.handleEditExpense(expense.id);
-                });
-            }
+                    return false;
+                };
+            });
             
             // Delete button
-            const deleteBtn = item.querySelector('.delete-expense-btn');
-            if (deleteBtn) {
-                deleteBtn.addEventListener('click', () => {
+            const deleteBtns = item.querySelectorAll('.delete-expense-btn');
+            deleteBtns.forEach(btn => {
+                btn.onclick = (e) => {
+                    console.log('Delete button clicked for expense:', expense.id);
+                    e.preventDefault();
+                    e.stopPropagation();
                     this.handleDeleteExpense(expense.id);
-                });
-            }
+                    return false;
+                };
+            });
             
             // Copy button
-            const copyBtn = item.querySelector('.copy-expense-btn');
-            if (copyBtn) {
-                copyBtn.addEventListener('click', () => {
+            const copyBtns = item.querySelectorAll('.copy-expense-btn');
+            copyBtns.forEach(btn => {
+                btn.onclick = (e) => {
+                    console.log('Copy button clicked for expense:', expense.id);
+                    e.preventDefault();
+                    e.stopPropagation();
                     this.handleCopyExpense(expense.id);
-                });
-            }
+                    return false;
+                };
+            });
             
             // View location button
-            const viewLocationBtn = item.querySelector('.view-location-btn');
-            if (viewLocationBtn && expense.location) {
-                viewLocationBtn.addEventListener('click', () => {
-                    let loc = expense.location;
-                    // Parse location if it's a string
-                    if (typeof loc === 'string') {
+            const locationBtns = item.querySelectorAll('.view-location-btn');
+            locationBtns.forEach(btn => {
+                btn.onclick = (e) => {
+                    console.log('Location button clicked for expense:', expense.id);
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Try to extract location data
+                    let locationData = expense.location;
+                    if (typeof locationData === 'string') {
                         try {
-                            loc = JSON.parse(loc);
-                        } catch (e) {
-                            console.error('Không thể phân tích dữ liệu vị trí:', e);
-                            showMessage('Không thể hiển thị vị trí', 'error');
-                            return;
+                            locationData = JSON.parse(locationData);
+                        } catch (err) {
+                            console.error('Failed to parse location string:', err);
                         }
                     }
-                    this.showLocationOnMap(loc, expense.name);
-                });
-            }
+                    
+                    if (locationData && locationData.lat && locationData.lng) {
+                        this.showLocationOnMap(locationData, expense.name);
+                    } else {
+                        showMessage('Không thể hiển thị vị trí cho chi tiêu này', 'error');
+                    }
+                    return false;
+                };
+            });
             
             // Add click event to location preview
             const locationPreview = item.querySelector('.mt-1.text-xs.text-blue-600');
@@ -2321,7 +2352,6 @@ export class ExpenseUIController extends UIController {
                     this.showLocationOnMap(loc, expense.name);
                 });
             }
-            
         }, 0);
         
         return item;
@@ -2442,3 +2472,4 @@ export class ExpenseUIController extends UIController {
         });
     }
 }
+

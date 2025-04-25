@@ -135,6 +135,21 @@ export class ExpenseManager {
         }
         
         const oldExpense = this.expenses[index];
+        console.log(`=== CẬP NHẬT CHI TIÊU #${id} ===`);
+        console.log('Chi tiêu cũ:', {
+            name: oldExpense.name,
+            amount: oldExpense.amount,
+            payer: oldExpense.payer,
+            date: oldExpense.date,
+            participants: oldExpense.participants?.length || 0
+        });
+        console.log('Chi tiêu mới:', {
+            name: newData.name,
+            amount: newData.amount,
+            payer: newData.payer,
+            date: newData.date,
+            participants: newData.participants?.length || 0
+        });
         
         // Check if fund has enough balance when changing payer to group fund
         if (newData.payer === this.GROUP_FUND_PAYER_ID && 
@@ -157,60 +172,39 @@ export class ExpenseManager {
         }
         
         try {
-            // Step 1: Handle old expense fund-related transactions
+            // STEP 1: Delete the old expense transactions and recalculate balances
+            console.log('Bước 1: Xóa giao dịch cũ và tính toán lại số dư');
+            
+            // If the expense was paid by the group fund, use the fund refund handler
             if (oldExpense.payer === this.GROUP_FUND_PAYER_ID) {
-                // Old payer was group fund, refund the fund
                 await this._handleGroupFundRefund(oldExpense);
             } else {
-                // Old payer was not group fund, need to remove both deposit and expense transactions
-                // First locate and remove the expense transaction from the fund
-                await this.fundManager.removeExpenseTransaction(oldExpense.id);
-                
-                // Then remove the deposit transaction from the payer
-                // This is more complex because deposit transactions aren't directly linked to expenses
-                // We need to find transactions with matching dates and amounts
-                await this.fundManager.removeDepositForExpense(
-                    oldExpense.payer, 
-                    oldExpense.amount, 
-                    oldExpense.date,
-                    `Đóng quỹ (tự động) để chi trả khoản: ${oldExpense.name}`
-                );
+                // For non-fund payers, delete both the expense transaction and deposit
+                try {
+                    // Delete the expense transaction
+                    await this.fundManager.removeExpenseTransaction(oldExpense.id);
+                    
+                    // Try to delete the automatic deposit, but continue if it fails
+                    try {
+                        await this.fundManager.removeDepositForExpense(
+                            oldExpense.payer,
+                            oldExpense.amount,
+                            oldExpense.date,
+                            `Đóng quỹ (tự động) để chi trả khoản: ${oldExpense.name}`
+                        );
+                    } catch (depositError) {
+                        console.warn(`Không thể xóa giao dịch nộp quỹ tự động cho chi tiêu ${oldExpense.id}:`, depositError);
+                        // Continue with update anyway
+                    }
+                } catch (transactionError) {
+                    console.warn(`Lỗi khi xóa giao dịch liên quan đến chi tiêu ${oldExpense.id}:`, transactionError);
+                    // Continue with update anyway
+                }
             }
             
-            // Step 2: Create new fund transactions
-            if (newData.payer === this.GROUP_FUND_PAYER_ID) {
-                // New payer is group fund - just handle as a normal fund expense
-                const tempExpense = new Expense({
-                    ...newData,
-                    id: oldExpense.id
-                });
-                
-                await this._handleGroupFundPayment(tempExpense);
-            } else {
-                // New payer is not group fund - implement the new approach
-                // 1. Add deposit from new payer to fund
-                const depositTransaction = FundTransaction.createDeposit(
-                    newData.payer,
-                    newData.amount,
-                    newData.date || new Date().toISOString().split('T')[0],
-                    `Đóng quỹ (tự động) để chi trả khoản: ${newData.name}`
-                );
-                
-                // Add deposit transaction (increases fund balance)
-                await this.fundManager.addTransaction(depositTransaction);
-                
-                // 2. Create expense from fund for all participants
-                const fundExpense = new Expense({
-                    ...newData,
-                    id: oldExpense.id,
-                    payer: this.GROUP_FUND_PAYER_ID
-                });
-                
-                await this._handleGroupFundPayment(fundExpense);
-            }
-            
-            // Update the expense in Supabase
-            const updatedExpense = await supabase.updateExpense(id, {
+            // STEP 2: Update the expense record in Supabase
+            console.log('Bước 2: Cập nhật bản ghi chi tiêu');
+            const updatedExpenseData = await supabase.updateExpense(id, {
                 ...newData,
                 id: oldExpense.id
             });
@@ -218,8 +212,45 @@ export class ExpenseManager {
             // Update local expense object
             oldExpense.update(newData);
             
+            // STEP 3: Create new transactions based on the updated expense
+            console.log('Bước 3: Tạo giao dịch mới');
+            
+            if (newData.payer === this.GROUP_FUND_PAYER_ID) {
+                // Group fund is the payer - handle as a direct fund expense
+                const tempExpense = new Expense({
+                    ...updatedExpenseData,
+                    id: oldExpense.id
+                });
+                
+                await this._handleGroupFundPayment(tempExpense);
+            } else {
+                // Non-fund payer - implement two-part transaction
+                // 1. Add deposit from payer to fund
+                const depositTransaction = FundTransaction.createDeposit(
+                    newData.payer,
+                    newData.amount,
+                    newData.date || new Date().toISOString().split('T')[0],
+                    `Đóng quỹ (tự động) để chi trả khoản: ${newData.name}`
+                );
+                
+                // Add deposit transaction
+                await this.fundManager.addTransaction(depositTransaction);
+                console.log(`Đã tạo giao dịch nộp quỹ tự động cho ${newData.payer}: ${newData.amount.toLocaleString()} VND`);
+                
+                // 2. Create fund expense for all participants
+                const fundExpense = new Expense({
+                    ...updatedExpenseData,
+                    id: oldExpense.id,
+                    payer: this.GROUP_FUND_PAYER_ID
+                });
+                
+                await this._handleGroupFundPayment(fundExpense);
+                console.log(`Đã tạo giao dịch chi tiêu từ quỹ: ${newData.amount.toLocaleString()} VND`);
+            }
+            
             // Invalidate cache
             invalidateCache('expenses');
+            console.log('Cập nhật chi tiêu thành công');
             
             return oldExpense;
         } catch (error) {
@@ -245,16 +276,27 @@ export class ExpenseManager {
                 await this._handleGroupFundRefund(expense);
             } else {
                 // For non-fund payers with the new approach, we need to undo both transactions
-                // First remove the expense transaction from the fund
-                await this.fundManager.removeExpenseTransaction(expense.id);
-                
-                // Then remove the deposit that was automatically created
-                await this.fundManager.removeDepositForExpense(
-                    expense.payer,
-                    expense.amount,
-                    expense.date,
-                    `Đóng quỹ (tự động) để chi trả khoản: ${expense.name}`
-                );
+                try {
+                    // First remove the expense transaction from the fund
+                    await this.fundManager.removeExpenseTransaction(expense.id);
+                    
+                    // Then try to remove the deposit that was automatically created
+                    // But continue even if this fails
+                    try {
+                        await this.fundManager.removeDepositForExpense(
+                            expense.payer,
+                            expense.amount,
+                            expense.date,
+                            `Đóng quỹ (tự động) để chi trả khoản: ${expense.name}`
+                        );
+                    } catch (depositError) {
+                        console.warn(`Không thể xóa giao dịch nộp quỹ tự động cho chi tiêu ${expense.id}:`, depositError);
+                        // Continue with expense deletion anyway
+                    }
+                } catch (transactionError) {
+                    console.warn(`Lỗi khi xóa giao dịch liên quan đến chi tiêu ${expense.id}:`, transactionError);
+                    // Continue with expense deletion anyway
+                }
             }
             
             // Delete expense from Supabase

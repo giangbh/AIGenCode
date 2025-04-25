@@ -514,7 +514,9 @@ export class GroupFundManager {
             
             if (!transaction) {
                 console.warn('Không tìm thấy giao dịch nộp quỹ phù hợp để xóa');
-                return false;
+                // Instead of returning false, continue with the expense deletion
+                // as the absence of a deposit shouldn't prevent the expense deletion
+                return true;
             }
             
             // Update fund balance locally
@@ -544,7 +546,8 @@ export class GroupFundManager {
             return true;
         } catch (error) {
             console.error('Lỗi khi xóa giao dịch nộp quỹ:', error);
-            return false;
+            // Even if there's an error, we should allow the expense deletion to continue
+            return true;
         }
     }
 } 

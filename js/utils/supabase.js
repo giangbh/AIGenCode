@@ -4,8 +4,13 @@
  */
 
 // Thay đổi các giá trị này bằng thông tin từ dự án Supabase của bạn
-const SUPABASE_URL = 'https://nvcmmagmyowkuvqjrirf.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52Y21tYWdteW93a3V2cWpyaXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQzMzgyNTgsImV4cCI6MjA1OTkxNDI1OH0.2ZuI36vMIB-vK76ZkwRJSDL3O7IpBkjUK-vPxv0PufA';
+// const SUPABASE_URL = 'https://nvcmmagmyowkuvqjrirf.supabase.co';
+// const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52Y21tYWdteW93a3V2cWpyaXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQzMzgyNTgsImV4cCI6MjA1OTkxNDI1OH0.2ZuI36vMIB-vK76ZkwRJSDL3O7IpBkjUK-vPxv0PufA';
+
+// dev env
+const SUPABASE_URL = 'https://ypyyxauomgyxsnsxeetf.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlweXl4YXVvbWd5eHNuc3hlZXRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1NDYxNzQsImV4cCI6MjA2MTEyMjE3NH0.hKlPvMj7S0mIAtEi1VeHtgrmhEacbwIQAOoLty_Mt0Y';
+
 
 // Khởi tạo Supabase client
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -280,39 +285,141 @@ export async function addExpense(expense) {
  * @returns {Promise<Object>} Chi tiêu đã cập nhật
  */
 export async function updateExpense(id, expense) {
-    const { data, error } = await supabase
-        .from('expenses')
-        .update({
+    try {
+        console.log(`=== CẬP NHẬT CHI TIÊU #${id} ===`);
+        
+        // Step 1: Get current expense data for logging
+        const { data: oldExpense, error: fetchError } = await supabase
+            .from('expenses')
+            .select('*')
+            .eq('id', id)
+            .single();
+            
+        if (fetchError) {
+            console.error('Lỗi khi lấy thông tin chi tiêu cũ:', fetchError);
+            throw new Error(`Không thể lấy thông tin chi tiêu cũ: ${fetchError.message}`);
+        }
+        
+        console.log('Chi tiêu cũ:', {
+            name: oldExpense.name,
+            amount: oldExpense.amount,
+            payer: oldExpense.payer,
+            participants: oldExpense.participants?.length || 0
+        });
+        
+        console.log('Chi tiêu mới:', {
             name: expense.name,
             amount: expense.amount,
-            date: expense.date,
             payer: expense.payer,
-            participants: expense.participants,
-            equal_split: expense.equalSplit,
-            splits: expense.equalSplit ? null : expense.splits,
-            location: expense.location
-        })
-        .eq('id', id)
-        .select();
-    
-    if (error) {
+            participants: expense.participants?.length || 0
+        });
+        
+        // Step 2: Delete all related transactions (this will handle balance adjustments)
+        await deleteExpenseTransactions(id);
+        console.log('Đã xóa các giao dịch liên quan đến chi tiêu cũ');
+        
+        // Step 3: Update the expense record itself
+        const { data, error } = await supabase
+            .from('expenses')
+            .update({
+                name: expense.name,
+                amount: expense.amount,
+                date: expense.date,
+                payer: expense.payer,
+                participants: expense.participants,
+                equal_split: expense.equalSplit,
+                splits: expense.equalSplit ? null : expense.splits,
+                location: expense.location
+            })
+            .eq('id', id)
+            .select();
+        
+        if (error) {
+            console.error('Lỗi khi cập nhật chi tiêu:', error);
+            throw new Error(`Không thể cập nhật chi tiêu: ${error.message}`);
+        }
+        
+        // Step 4: Create new transactions based on updated expense
+        // (This would typically be handled by a trigger or a separate function call)
+        // If paid by the fund, create a fund transaction
+        if (expense.payer === 'Quỹ chung' || expense.payer === 'Group Fund') {
+            await addExpenseTransaction(id, expense.name, expense.amount, expense.date);
+            console.log(`Đã tạo giao dịch chi tiêu mới từ quỹ: ${expense.amount.toLocaleString()} VND`);
+            
+            // Update fund balance
+            const currentBalance = await getCurrentBalance();
+            await updateFundBalance(currentBalance - expense.amount, null);
+        } else {
+            // For each participant, update their balances for the new expense
+            for (const participant of expense.participants || []) {
+                if (participant === 'Quỹ chung' || participant === 'Group Fund') {
+                    continue;
+                }
+                
+                let shareAmount = 0;
+                
+                if (expense.equalSplit) {
+                    shareAmount = expense.amount / expense.participants.length;
+                } else if (expense.splits && expense.splits[participant]) {
+                    shareAmount = expense.splits[participant];
+                }
+                
+                if (shareAmount > 0) {
+                    // Get current balance
+                    const { data: memberBalance } = await supabase
+                        .from('member_balances')
+                        .select('current_balance')
+                        .eq('member_name', participant)
+                        .maybeSingle();
+                        
+                    if (memberBalance) {
+                        // Deduct their share
+                        const newBalance = memberBalance.current_balance - shareAmount;
+                        await updateMemberBalance(participant, newBalance, null);
+                        console.log(`${participant}: Điều chỉnh -${shareAmount.toLocaleString()} VND (phần chi tiêu)`);
+                    } else {
+                        await calculateAndUpdateMemberBalance(participant);
+                    }
+                }
+            }
+            
+            // Update payer's balance (credit them for paying)
+            if (expense.payer && expense.payer !== 'Quỹ chung' && expense.payer !== 'Group Fund') {
+                const { data: payerBalance } = await supabase
+                    .from('member_balances')
+                    .select('current_balance')
+                    .eq('member_name', expense.payer)
+                    .maybeSingle();
+                    
+                if (payerBalance) {
+                    const newBalance = payerBalance.current_balance + expense.amount;
+                    await updateMemberBalance(expense.payer, newBalance, null);
+                    console.log(`${expense.payer}: Điều chỉnh +${expense.amount.toLocaleString()} VND (đã trả tiền)`);
+                } else {
+                    await calculateAndUpdateMemberBalance(expense.payer);
+                }
+            }
+        }
+        
+        console.log('Cập nhật chi tiêu thành công');
+        
+        // Chuyển đổi từ định dạng DB sang định dạng ứng dụng
+        return {
+            id: data[0].id,
+            name: data[0].name,
+            amount: data[0].amount,
+            date: data[0].date,
+            payer: data[0].payer,
+            participants: data[0].participants,
+            equalSplit: data[0].equal_split,
+            splits: data[0].splits || {},
+            created_at: data[0].created_at,
+            location: data[0].location
+        };
+    } catch (error) {
         console.error('Lỗi khi cập nhật chi tiêu:', error);
-        throw new Error(`Không thể cập nhật chi tiêu: ${error.message}`);
+        throw error;
     }
-    
-    // Chuyển đổi từ định dạng DB sang định dạng ứng dụng
-    return {
-        id: data[0].id,
-        name: data[0].name,
-        amount: data[0].amount,
-        date: data[0].date,
-        payer: data[0].payer,
-        participants: data[0].participants,
-        equalSplit: data[0].equal_split,
-        splits: data[0].splits || {},
-        created_at: data[0].created_at,
-        location: data[0].location
-    };
 }
 
 /**
@@ -460,17 +567,172 @@ export async function deleteFundTransaction(id) {
  * @returns {Promise<boolean>} Kết quả xóa
  */
 export async function deleteExpenseTransactions(expenseId) {
-    const { error } = await supabase
-        .from('fund_transactions')
-        .delete()
-        .eq('expense_id', expenseId);
-    
-    if (error) {
-        console.error('Lỗi khi xóa giao dịch quỹ liên quan đến chi tiêu:', error);
-        throw new Error(`Không thể xóa giao dịch quỹ liên quan: ${error.message}`);
+    try {
+        // Step 1: Find all transactions related to this expense
+        const { data: transactions, error: findError } = await supabase
+            .from('fund_transactions')
+            .select('*')
+            .eq('expense_id', expenseId);
+            
+        if (findError) {
+            console.error('Lỗi khi tìm giao dịch liên quan đến chi tiêu:', findError);
+            throw new Error(`Không thể tìm giao dịch liên quan: ${findError.message}`);
+        }
+        
+        // If there are transactions that might be referenced
+        if (transactions && transactions.length > 0) {
+            // Get all transaction IDs
+            const transactionIds = transactions.map(t => t.id);
+            
+            // Step 2: Update member_balances table to remove references to these transactions
+            const { error: updateMemberError } = await supabase
+                .from('member_balances')
+                .update({ last_transaction_id: null })
+                .in('last_transaction_id', transactionIds);
+                
+            if (updateMemberError) {
+                console.error('Lỗi khi cập nhật bảng member_balances:', updateMemberError);
+                throw new Error(`Không thể cập nhật tham chiếu trong bảng member_balances: ${updateMemberError.message}`);
+            }
+            
+            // Step 3: Update fund_balance table to remove references to these transactions
+            const { error: updateFundError } = await supabase
+                .from('fund_balance')
+                .update({ last_transaction_id: null })
+                .in('last_transaction_id', transactionIds);
+                
+            if (updateFundError) {
+                console.error('Lỗi khi cập nhật bảng fund_balance:', updateFundError);
+                throw new Error(`Không thể cập nhật tham chiếu trong bảng fund_balance: ${updateFundError.message}`);
+            }
+            
+            // Step 4: Get the expense details for incremental balance adjustments
+            const { data: expense, error: expenseError } = await supabase
+                .from('expenses')
+                .select('*')
+                .eq('id', expenseId)
+                .single();
+                
+            if (expenseError) {
+                console.error('Lỗi khi lấy thông tin chi tiêu:', expenseError);
+                // Continue with deletion even if we can't get expense details
+            } else if (expense) {
+                console.log(`=== XÓA CHI TIÊU #${expenseId} ===`);
+                console.log(`Chi tiêu: ${expense.name}`);
+                console.log(`Số tiền: ${expense.amount.toLocaleString()} VND`);
+                console.log(`Người chi: ${expense.payer}`);
+                
+                // INCREMENTAL APPROACH: Update balances by directly adjusting for this specific expense
+                
+                // 1. Handle fund balance first if needed
+                if (expense.payer === 'Quỹ chung' || expense.payer === 'Group Fund') {
+                    // If expense was paid from fund, add the amount back to fund balance
+                    const { data: currentFundBalance } = await supabase
+                        .from('fund_balance')
+                        .select('current_balance')
+                        .single();
+                        
+                    if (currentFundBalance) {
+                        const newBalance = currentFundBalance.current_balance + expense.amount;
+                        await updateFundBalance(newBalance, null);
+                        console.log(`Hoàn trả ${expense.amount.toLocaleString()} VND vào quỹ chung`);
+                    }
+                }
+                
+                // 2. Handle individual participant balances incrementally
+                if (expense.participants && expense.participants.length > 0) {
+                    console.log('Cập nhật số dư cho các thành viên:');
+                    
+                    for (const participant of expense.participants) {
+                        // Skip special accounts
+                        if (participant === 'Quỹ chung' || participant === 'Group Fund') {
+                            console.log(`Bỏ qua tính toán số dư cho ${participant}`);
+                            continue;
+                        }
+                        
+                        try {
+                            // Get current balance
+                            const { data: memberBalance } = await supabase
+                                .from('member_balances')
+                                .select('current_balance')
+                                .eq('member_name', participant)
+                                .maybeSingle();
+                                
+                            if (memberBalance) {
+                                let adjustmentAmount = 0;
+                                
+                                // Calculate how much this person paid toward the expense
+                                if (expense.equal_split) {
+                                    adjustmentAmount = expense.amount / expense.participants.length;
+                                } else if (expense.splits && expense.splits[participant]) {
+                                    adjustmentAmount = expense.splits[participant];
+                                }
+                                
+                                // If participant was the payer, subtract the full amount 
+                                // (removing their credit for paying)
+                                if (participant === expense.payer) {
+                                    adjustmentAmount -= expense.amount;
+                                }
+                                
+                                // Update balance (add adjustmentAmount because we're removing the expense)
+                                if (adjustmentAmount !== 0) {
+                                    const newBalance = memberBalance.current_balance + adjustmentAmount;
+                                    await updateMemberBalance(participant, newBalance, null);
+                                    console.log(`${participant}: ${memberBalance.current_balance.toLocaleString()} VND → ${newBalance.toLocaleString()} VND (điều chỉnh: ${adjustmentAmount > 0 ? '+' : ''}${adjustmentAmount.toLocaleString()} VND)`);
+                                }
+                            } else {
+                                // If no balance record exists, we still need to consider this transaction
+                                console.log(`Không tìm thấy số dư cho ${participant}, tính toán từ đầu`);
+                                await calculateAndUpdateMemberBalance(participant);
+                            }
+                        } catch (err) {
+                            console.error(`Lỗi khi cập nhật số dư cho ${participant}:`, err);
+                            // Continue with other participants
+                        }
+                    }
+                    
+                    // Special case: If payer is not in participants list, adjust their balance too
+                    if (expense.payer && 
+                        expense.payer !== 'Quỹ chung' && 
+                        expense.payer !== 'Group Fund' && 
+                        !expense.participants.includes(expense.payer)) {
+                        
+                        const { data: payerBalance } = await supabase
+                            .from('member_balances')
+                            .select('current_balance')
+                            .eq('member_name', expense.payer)
+                            .maybeSingle();
+                            
+                        if (payerBalance) {
+                            // Remove the credit they received for paying
+                            const newBalance = payerBalance.current_balance - expense.amount;
+                            await updateMemberBalance(expense.payer, newBalance, null);
+                            console.log(`${expense.payer} (người chi): ${payerBalance.current_balance.toLocaleString()} VND → ${newBalance.toLocaleString()} VND (điều chỉnh: -${expense.amount.toLocaleString()} VND)`);
+                        } else {
+                            console.log(`Không tìm thấy số dư cho ${expense.payer}, tính toán từ đầu`);
+                            await calculateAndUpdateMemberBalance(expense.payer);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Step 5: Now safely delete the transactions
+        const { error } = await supabase
+            .from('fund_transactions')
+            .delete()
+            .eq('expense_id', expenseId);
+        
+        if (error) {
+            console.error('Lỗi khi xóa giao dịch quỹ liên quan đến chi tiêu:', error);
+            throw new Error(`Không thể xóa giao dịch quỹ liên quan: ${error.message}`);
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('Lỗi trong quá trình xóa giao dịch chi tiêu:', error);
+        throw error;
     }
-    
-    return true;
 }
 
 /**
@@ -705,38 +967,130 @@ export async function getMemberBalance(memberName) {
  */
 export async function calculateAndUpdateMemberBalance(memberName) {
     try {
-        // Sử dụng RPC để tính số dư từ server
-        const { data, error } = await supabase.rpc('calculate_member_balance', {
-            member_name: memberName
-        });
-        
-        if (error) {
-            console.error(`Lỗi khi tính số dư cho ${memberName} (RPC):`, error);
-            
-            // Nếu RPC lỗi, tính thủ công
-            const { data: deposits, error: depositError } = await supabase
-                .from('fund_transactions')
-                .select('amount')
-                .eq('type', 'deposit')
-                .eq('member', memberName);
-                
-            if (depositError) {
-                console.error('Lỗi khi lấy giao dịch nộp tiền:', depositError);
-                return 0;
-            }
-            
-            const balance = deposits.reduce((sum, deposit) => sum + deposit.amount, 0);
-            
-            // Cập nhật vào bảng member_balances
-            await updateMemberBalance(memberName, balance, null);
-            
-            return balance;
+        // Skip special account names that are not actual members
+        if (memberName === 'Group Fund' || memberName === 'Quỹ chung') {
+            console.log(`Bỏ qua cập nhật số dư cho "${memberName}" vì đây không phải là thành viên thực tế`);
+            return 0;
         }
         
-        // Cập nhật vào bảng member_balances
-        await updateMemberBalance(memberName, data, null);
+        console.log(`Bắt đầu tính toán số dư cho thành viên: ${memberName}`);
         
-        return data;
+        // Manual calculation with detailed logs
+        let balance = 0;
+        let depositTotal = 0;
+        let incomingTotal = 0;
+        let outgoingTotal = 0;
+        let expensePaidTotal = 0;
+        let expenseShareTotal = 0;
+        
+        // 1. Tính tổng tiền đã nộp (deposits)
+        const { data: deposits, error: depositError } = await supabase
+            .from('fund_transactions')
+            .select('id, amount, date')
+            .eq('type', 'deposit')
+            .eq('member', memberName);
+            
+        if (depositError) {
+            console.error('Lỗi khi lấy giao dịch nộp tiền:', depositError);
+        } else {
+            depositTotal = deposits.reduce((sum, deposit) => {
+                console.log(`+ Deposit: ${deposit.id} | ${deposit.date} | ${deposit.amount.toLocaleString()} VND`);
+                return sum + deposit.amount;
+            }, 0);
+            balance += depositTotal;
+            console.log(`> Tổng tiền nộp: ${depositTotal.toLocaleString()} VND`);
+        }
+        
+        // 2. Tính tổng tiền đã nhận từ các giao dịch chuyển khoản (transfers - nhận)
+        const { data: incomingTransfers, error: incomingError } = await supabase
+            .from('fund_transactions')
+            .select('id, amount, date, fromMember')
+            .eq('type', 'transfer')
+            .eq('toMember', memberName);
+            
+        if (incomingError) {
+            console.error('Lỗi khi lấy giao dịch chuyển khoản nhận về:', incomingError);
+        } else {
+            incomingTotal = incomingTransfers.reduce((sum, transfer) => {
+                console.log(`+ Incoming transfer from ${transfer.fromMember}: ${transfer.id} | ${transfer.date} | ${transfer.amount.toLocaleString()} VND`);
+                return sum + transfer.amount;
+            }, 0);
+            balance += incomingTotal;
+            console.log(`> Tổng tiền nhận: ${incomingTotal.toLocaleString()} VND`);
+        }
+        
+        // 3. Trừ tổng tiền đã chi (transfers - chi)
+        const { data: outgoingTransfers, error: outgoingError } = await supabase
+            .from('fund_transactions')
+            .select('id, amount, date, toMember')
+            .eq('type', 'transfer')
+            .eq('fromMember', memberName);
+            
+        if (outgoingError) {
+            console.error('Lỗi khi lấy giao dịch chuyển khoản đi:', outgoingError);
+        } else {
+            outgoingTotal = outgoingTransfers.reduce((sum, transfer) => {
+                console.log(`- Outgoing transfer to ${transfer.toMember}: ${transfer.id} | ${transfer.date} | ${transfer.amount.toLocaleString()} VND`);
+                return sum + transfer.amount;
+            }, 0);
+            balance -= outgoingTotal;
+            console.log(`> Tổng tiền chuyển đi: ${outgoingTotal.toLocaleString()} VND`);
+        }
+        
+        // 4. Tính tiền đã chi tiêu (phần chia nhỏ)
+        const { data: expenses, error: expensesError } = await supabase
+            .from('expenses')
+            .select('id, name, amount, date, payer, participants, equal_split, splits');
+            
+        if (expensesError) {
+            console.error('Lỗi khi lấy chi tiêu:', expensesError);
+        } else {
+            for (const expense of expenses) {
+                // Nếu thành viên này trả tiền, cộng vào số dư
+                if (expense.payer === memberName) {
+                    console.log(`+ Expense paid (${expense.id}): "${expense.name}" | ${expense.date} | ${expense.amount.toLocaleString()} VND`);
+                    expensePaidTotal += expense.amount;
+                    balance += expense.amount;
+                }
+                
+                // Nếu thành viên là người tham gia, trừ phần chi tiêu
+                if (expense.participants && expense.participants.includes(memberName)) {
+                    let shareAmount = 0;
+                    
+                    if (expense.equal_split) {
+                        // Chia đều
+                        shareAmount = expense.amount / expense.participants.length;
+                        console.log(`- Expense share (${expense.id}, equal split): "${expense.name}" | ${expense.date} | ${shareAmount.toLocaleString()} VND (${expense.amount.toLocaleString()} / ${expense.participants.length} participants)`);
+                    } else if (expense.splits && expense.splits[memberName]) {
+                        // Chia theo tỷ lệ
+                        shareAmount = expense.splits[memberName];
+                        console.log(`- Expense share (${expense.id}, custom split): "${expense.name}" | ${expense.date} | ${shareAmount.toLocaleString()} VND (specified amount)`);
+                    }
+                    
+                    expenseShareTotal += shareAmount;
+                    balance -= shareAmount;
+                }
+            }
+            console.log(`> Tổng chi tiêu đã trả: ${expensePaidTotal.toLocaleString()} VND`);
+            console.log(`> Tổng phần chi tiêu phải trả: ${expenseShareTotal.toLocaleString()} VND`);
+        }
+        
+        console.log(`=== TÓM TẮT SỐ DƯ CHO ${memberName} ===`);
+        console.log(`+ Tổng tiền nộp: ${depositTotal.toLocaleString()} VND`);
+        console.log(`+ Tổng tiền nhận: ${incomingTotal.toLocaleString()} VND`);
+        console.log(`+ Tổng chi tiêu đã trả: ${expensePaidTotal.toLocaleString()} VND`);
+        console.log(`- Tổng tiền chuyển đi: ${outgoingTotal.toLocaleString()} VND`);
+        console.log(`- Tổng phần chi tiêu phải trả: ${expenseShareTotal.toLocaleString()} VND`);
+        console.log(`= SỐ DƯ CUỐI CÙNG: ${balance.toLocaleString()} VND`);
+        
+        // Round to integer for storage
+        const roundedBalance = Math.round(balance);
+        console.log(`= SỐ DƯ LÀM TRÒN: ${roundedBalance.toLocaleString()} VND`);
+        
+        // Cập nhật vào bảng member_balances
+        await updateMemberBalance(memberName, roundedBalance, null);
+        
+        return roundedBalance;
     } catch (error) {
         console.error(`Lỗi khi tính số dư cho ${memberName}:`, error);
         return 0;
@@ -751,6 +1105,12 @@ export async function calculateAndUpdateMemberBalance(memberName) {
  * @returns {Promise<Object>} Kết quả cập nhật
  */
 export async function updateMemberBalance(memberName, newBalance, transactionId) {
+    // Skip special account names that are not actual members
+    if (memberName === 'Group Fund' || memberName === 'Quỹ chung') {
+        console.log(`Bỏ qua cập nhật số dư cho "${memberName}" vì đây không phải là thành viên thực tế`);
+        return null;
+    }
+
     // Convert newBalance to integer before saving to the database
     // as the member_balances table expects an INTEGER type
     const balanceAsInteger = Math.round(newBalance);

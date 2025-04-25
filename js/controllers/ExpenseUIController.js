@@ -927,78 +927,75 @@ export class ExpenseUIController extends UIController {
      */
     handleEditExpense(expenseId) {
         console.log('handleEditExpense called with ID:', expenseId);
-        console.log('All expenses:', this.app.expenseManager.getAllExpenses().length);
         
+        // Temporarily disabled
+        showMessage('Tính năng sửa chi tiêu đang tạm thời vô hiệu hóa do đang cập nhật logic', 'warning');
+        return;
+        
+        // Rest of the function is temporarily disabled
+        /*
         const expense = this.app.expenseManager.getExpenseById(expenseId);
-        console.log('Found expense:', expense ? 'Yes' : 'No', expense);
-        
         if (!expense) {
             showMessage('Không tìm thấy chi tiêu', 'error');
             return;
         }
         
-        console.log('Editing expense with data:', expense);
+        // Update form for editing
+        this.resetForm();
+        this.isEditMode = true;
+        this.editingExpenseId = expenseId;
         
-        // Set form values
-        this.editExpenseIdInput.value = expense.id;
+        // Fill in form fields
         this.expenseNameInput.value = expense.name;
-        this.expenseAmountInput.value = formatAmountInput(String(expense.amount));
+        this.expenseAmountInput.value = expense.amount;
+        
+        // Set date
         this.expenseDateInput.value = expense.date;
-        this.payerSelect.value = expense.payer;
+        
+        // Set payer
+        const payerOptions = this.expensePayerSelect.options;
+        for (let i = 0; i < payerOptions.length; i++) {
+            if (payerOptions[i].value === expense.payer) {
+                this.expensePayerSelect.selectedIndex = i;
+                break;
+            }
+        }
+        
+        // Set participants and split type
+        this.equalSplitCheckbox.checked = expense.equalSplit;
+        this.splitTypeToggle();
         
         // Check participant checkboxes
-        const checkboxes = this.participantsListDiv.querySelectorAll('.participant-checkbox');
+        const checkboxes = this.participantContainer.querySelectorAll('input[type="checkbox"]');
         checkboxes.forEach(checkbox => {
             checkbox.checked = expense.participants.includes(checkbox.value);
         });
         
-        // Set split method
-        this.splitEquallyToggle.checked = expense.equalSplit;
-        if (expense.equalSplit) {
-            this.manualSplitSection.classList.add('hidden');
-        } else {
-            this.manualSplitSection.classList.remove('hidden');
+        // Update toggle all button state
+        this.updateToggleAllButtonState();
+        
+        // Handle manual splits if needed
+        if (!expense.equalSplit) {
             this.renderManualSplitInputs(expense.splits);
         }
         
-        // Handle location data
-        if (expense.location && expense.location.lat && expense.location.lng && this.saveLocationToggle) {
-            // Enable location toggle
-            this.saveLocationToggle.checked = true;
-            this.locationCaptureSection.classList.remove('hidden');
-            
-            // Set location values
-            this.locationLat.value = expense.location.lat;
-            this.locationLng.value = expense.location.lng;
-            this.locationName.value = expense.location.name || '';
-            
-            this.locationStatus.textContent = `Đã lấy vị trí: ${parseFloat(expense.location.lat).toFixed(6)}, ${parseFloat(expense.location.lng).toFixed(6)}`;
-            this.locationStatus.classList.add('text-green-600');
-            this.locationStatus.classList.remove('text-gray-600', 'text-red-600');
-        } else if (this.saveLocationToggle) {
-            // Reset location fields
-            this.saveLocationToggle.checked = false;
-            this.locationCaptureSection.classList.add('hidden');
-            this.locationLat.value = '';
-            this.locationLng.value = '';
-            this.locationName.value = '';
-            this.locationStatus.textContent = 'Chưa có vị trí nào được lưu';
-            this.locationStatus.classList.remove('text-green-600', 'text-red-600');
-            this.locationStatus.classList.add('text-gray-600');
+        // Set location if available
+        if (expense.location) {
+            this.currentLocation = expense.location;
+            this.updateLocationDisplay();
+        } else {
+            this.clearLocationDisplay();
         }
         
-        // Update UI state for editing
-        this.editingExpenseId = expense.id;
-        this.formTitle.textContent = 'Sửa chi tiêu';
-        this.saveBtnText.textContent = 'Cập nhật';
-        this.cancelEditBtn.classList.remove('hidden');
+        // Update button text
+        const submitButton = document.getElementById('expenseFormSubmitBtn');
+        if (submitButton) {
+            submitButton.textContent = 'Cập nhật chi tiêu';
+        }
         
-        // Scroll to form
-        this.expenseNameInput.focus();
-        window.scrollTo({
-            top: document.getElementById('expense-form-section').offsetTop - 20,
-            behavior: 'smooth'
-        });
+        // Show the modal
+        this.showAddExpenseModal();
+        */
     }
     
     /**
@@ -2142,7 +2139,7 @@ export class ExpenseUIController extends UIController {
             : rawLocationDisplay; // Fall back to raw display if parsed location isn't available
         
         // Thu gọn các nút
-        const editButton = `<button type="button" class="edit-expense-btn text-blue-600 hover:text-blue-800 mr-1 p-2 rounded hover:bg-blue-100 transition-colors duration-200 flex items-center z-10" data-id="${expense.id}" title="Chỉnh sửa">
+        const editButton = `<button type="button" class="text-gray-400 cursor-not-allowed mr-1 p-2 rounded transition-colors duration-200 flex items-center z-10" data-id="${expense.id}" title="Tạm thời vô hiệu hóa do đang cập nhật logic" disabled>
             <i data-lucide="edit" class="w-3.5 h-3.5 mr-1"></i>
             <span class="text-xs">Sửa</span>
         </button>`;

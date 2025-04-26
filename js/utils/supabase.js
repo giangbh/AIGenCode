@@ -3,14 +3,44 @@
  * Handles connection and data operations with Supabase
  */
 
-// Thay đổi các giá trị này bằng thông tin từ dự án Supabase của bạn
-const SUPABASE_URL = 'https://nvcmmagmyowkuvqjrirf.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52Y21tYWdteW93a3V2cWpyaXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQzMzgyNTgsImV4cCI6MjA1OTkxNDI1OH0.2ZuI36vMIB-vK76ZkwRJSDL3O7IpBkjUK-vPxv0PufA';
+// Configuration for different environments
+const ENV = {
+    PRODUCTION: {
+        SUPABASE_URL: 'https://nvcmmagmyowkuvqjrirf.supabase.co',
+        SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52Y21tYWdteW93a3V2cWpyaXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQzMzgyNTgsImV4cCI6MjA1OTkxNDI1OH0.2ZuI36vMIB-vK76ZkwRJSDL3O7IpBkjUK-vPxv0PufA'
+    },
+    DEVELOPMENT: {
+        SUPABASE_URL: 'https://ypyyxauomgyxsnsxeetf.supabase.co',
+        SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlweXl4YXVvbWd5eHNuc3hlZXRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1NDYxNzQsImV4cCI6MjA2MTEyMjE3NH0.hKlPvMj7S0mIAtEi1VeHtgrmhEacbwIQAOoLty_Mt0Y'
+    }
+};
 
-// // dev env
-// const SUPABASE_URL = 'https://ypyyxauomgyxsnsxeetf.supabase.co';
-// const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlweXl4YXVvbWd5eHNuc3hlZXRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1NDYxNzQsImV4cCI6MjA2MTEyMjE3NH0.hKlPvMj7S0mIAtEi1VeHtgrmhEacbwIQAOoLty_Mt0Y';
+// Allow forcing environment through localStorage for testing
+// Usage: localStorage.setItem('FORCE_ENV', 'PRODUCTION') to test production
+// Usage: localStorage.setItem('FORCE_ENV', 'DEVELOPMENT') to test development
+// Usage: localStorage.removeItem('FORCE_ENV') to use automatic detection
 
+// Determine the current environment
+function getCurrentEnvironment() {
+    // Check for forced environment in localStorage (for testing)
+    const forcedEnv = localStorage.getItem('FORCE_ENV');
+    if (forcedEnv && ENV[forcedEnv]) {
+        console.log(`Using forced environment: ${forcedEnv}`);
+        return forcedEnv;
+    }
+    
+    // Check if we're in production based on URL or other factors
+    const isProd = window.location.hostname === 'giangbh.github.io' || 
+                   window.location.href.includes('giangbh.github.io');
+                  
+    return isProd ? 'PRODUCTION' : 'DEVELOPMENT';
+}
+
+// Get the configuration for the current environment
+const currentEnv = getCurrentEnvironment();
+console.log(`Running in ${currentEnv} environment`);
+
+const { SUPABASE_URL, SUPABASE_KEY } = ENV[currentEnv];
 
 // Khởi tạo Supabase client
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);

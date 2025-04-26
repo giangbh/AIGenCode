@@ -4,12 +4,12 @@
  */
 
 // Thay đổi các giá trị này bằng thông tin từ dự án Supabase của bạn
-// const SUPABASE_URL = 'https://nvcmmagmyowkuvqjrirf.supabase.co';
-// const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52Y21tYWdteW93a3V2cWpyaXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQzMzgyNTgsImV4cCI6MjA1OTkxNDI1OH0.2ZuI36vMIB-vK76ZkwRJSDL3O7IpBkjUK-vPxv0PufA';
+const SUPABASE_URL = 'https://nvcmmagmyowkuvqjrirf.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52Y21tYWdteW93a3V2cWpyaXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQzMzgyNTgsImV4cCI6MjA1OTkxNDI1OH0.2ZuI36vMIB-vK76ZkwRJSDL3O7IpBkjUK-vPxv0PufA';
 
-// dev env
-const SUPABASE_URL = 'https://ypyyxauomgyxsnsxeetf.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlweXl4YXVvbWd5eHNuc3hlZXRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1NDYxNzQsImV4cCI6MjA2MTEyMjE3NH0.hKlPvMj7S0mIAtEi1VeHtgrmhEacbwIQAOoLty_Mt0Y';
+// // dev env
+// const SUPABASE_URL = 'https://ypyyxauomgyxsnsxeetf.supabase.co';
+// const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlweXl4YXVvbWd5eHNuc3hlZXRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1NDYxNzQsImV4cCI6MjA2MTEyMjE3NH0.hKlPvMj7S0mIAtEi1VeHtgrmhEacbwIQAOoLty_Mt0Y';
 
 
 // Khởi tạo Supabase client

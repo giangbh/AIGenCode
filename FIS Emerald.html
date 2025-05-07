@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Core Banking Performance Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        /* Custom styles for layout and appearance */
+        body {
+            font-family: sans-serif;
+            line-height: 1.5;
+            background-color: #f3f4f6; /* Light gray background */
+            padding: 1rem;
+        }
+        .dashboard-container {
+            max-width: 960px; /* Max width for the dashboard */
+            margin: 0 auto; /* Center the container */
+            background-color: #ffffff; /* White background for the dashboard */
+            border-radius: 8px; /* Rounded corners */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+            padding: 1.5rem;
+        }
+        .chart-section {
+            margin-bottom: 2rem; /* Space between chart sections */
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid #e5e7eb; /* Separator line */
+        }
+        .chart-section:last-child {
+            border-bottom: none; /* No separator for the last section */
+            padding-bottom: 0;
+            margin-bottom: 0;
+        }
+        .chart-title {
+            font-size: 1.25rem; /* Large text */
+            font-weight: 600; /* Semi-bold font */
+            margin-bottom: 0.75rem; /* Space below title */
+            color: #1f2937; /* Dark gray text */
+        }
+        .chart-description {
+            font-size: 0.875rem; /* Small text */
+            color: #6b7280; /* Medium gray text */
+            margin-bottom: 1rem; /* Space below description */
+        }
+        .button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+        }
+        .button-primary {
+            background-color: #3b82f6; /* Blue */
+            color: white;
+        }
+        .button-primary:hover {
+            background-color: #2563eb; /* Darker blue */
+        }
+         .button-secondary {
+            background-color: #d1d5db; /* Gray */
+            color: #374151; /* Dark gray */
+        }
+        .button-secondary:hover {
+            background-color: #9ca3af; /* Darker gray */
+        }
+        .button-success {
+            background-color: #10b981; /* Green */
+            color: white;
+        }
+        .button-success:hover {
+            background-color: #059669; /* Darker green */
+        }
+        .button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+         .loading-indicator {
+            display: none; /* Hidden by default */
+            align-items: center;
+            justify-content: center;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            z-index: 1000;
+            font-size: 1.5rem;
+            color: #333;
+        }
+        .table-container {
+            overflow-x: auto; /* Allow horizontal scrolling for the table */
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        th, td {
+            border: 1px solid #d1d5db; /* Light gray border */
+            padding: 0.75rem 1rem;
+            text-align: left;
+        }
+        th {
+            background-color: #e5e7eb; /* Lighter gray background for headers */
+            font-weight: 600;
+            color: #374151;
+        }
+        tbody tr:nth-child(even) {
+            background-color: #f9fafb; /* Alternate row color */
+        }
+        /* Added style to limit chart width and set height */
+        .chart-canvas-container {
+            max-width: 600px; /* Adjust this value as needed */
+            height: 450px; /* Increased height */
+            margin: 0 auto; /* Center the chart within its section */
+        }
+
+        /* Styles for the tab structure */
+        .tab-buttons {
+            display: flex;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid #e5e7eb; /* Bottom border for the tab bar */
+        }
+        .tab-button {
+            padding: 0.75rem 1.5rem;
+            cursor: pointer;
+            border: none;
+            background-color: transparent;
+            font-weight: 500;
+            color: #6b7280; /* Default tab color */
+            transition: color 0.3s ease-in-out, border-bottom-color 0.3s ease-in-out; /* Added transition */
+        }
+        .tab-button:hover {
+            color: #1f2937; /* Darker color on hover */
+             border-bottom-color: #9ca3af; /* Subtle border on hover */
+        }
+        .tab-button.active {
+            color: #3b82f6; /* Active tab color */
+            border-bottom: 2px solid #3b82f6; /* Active tab indicator */
+        }
+        .tab-content {
+            display: none; /* Hide tab content by default */
+        }
+         .bottom-section {
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        /* Styles for Key Changes section */
+        .key-changes-pillar {
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            background-color: #f9fafb;
+            transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+        }
+        .key-changes-pillar:hover {
+            background-color: #e5e7eb;
+            border-color: #9ca3af;
+        }
+        .key-changes-pillar-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 0.5rem;
+        }
+        .key-changes-details {
+            display: none; /* Hidden by default */
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e5e7eb;
+            color: #374151;
+        }
+        .key-changes-chart-container {
+             max-width: 400px; /* Smaller container for pie chart */
+             height: 400px; /* Set height for pie chart */
+             margin: 0 auto 2rem auto; /* Center and add space below */
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container" id="performance-dashboard">
+        <h1 class="text-2xl font-bold text-center mb-6 text-gray-800">Core Banking Performance Dashboard</h1>
+
+        <div class="tab-buttons">
+            <button id="online-tab-btn" class="tab-button active">Online</button>
+            <button id="eod-tab-btn" class="tab-button">EOD</button>
+            <button id="key-changes-tab-btn" class="tab-button">Key Changes</button>
+            <button id="table-tab-btn" class="tab-button">Table</button>
+        </div>
+
+        <div id="online-view" class="tab-content">
+             <div class="flex items-center mb-4">
+                <input type="checkbox" id="utilization-checkbox" class="mr-2 form-checkbox text-blue-600">
+                <label for="utilization-checkbox" class="text-gray-700">Show Capacity Utilization</label>
+            </div>
+
+            <div class="chart-section">
+                <h3 class="chart-title">TPS Financial Metrics - Actual vs Capacity</h3>
+                <p class="chart-description">
+                    TPS Financial Actual increased steadily from 200 to 400, while Capacity significantly increased from 500 to 4000,
+                    showing that the capacity is much higher than the actual demand.
+                </p>
+                <div class="chart-canvas-container">
+                    <canvas id="tpsFinChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-section">
+                <h3 class="chart-title">TPS Non-Financial</h3>
+                <p class="chart-description">
+                    TPS Non-Financial decreased over time as the system was optimized, allowing for more efficient processing with fewer resources.
+                    The Capacity level remained stable at 20,000 TPS.
+                </p>
+                 <div class="chart-canvas-container">
+                    <canvas id="tpsNonFinChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-section">
+                <h3 class="chart-title">Response Time (Financial Transactions)</h3>
+                <p class="chart-description">
+                    Average response time for financial transactions decreased significantly, indicating improved system performance and efficiency.
+                </p>
+                 <div class="chart-canvas-container">
+                    <canvas id="responseTimeChart"></canvas>
+                </div>
+            </div>
+
+             <div class="chart-section">
+                <h3 class="chart-title">Financial Transaction Volume and Growth</h3>
+                <p class="chart-description">
+                    Total volume of financial transactions per year and the annual growth rate.
+                </p>
+                 <div class="chart-canvas-container">
+                    <canvas id="transactionVolumeChart"></canvas>
+                </div>
+            </div>
+
+
+             <div class="chart-section" id="utilization-chart-section" style="display: none;">
+                <h3 class="chart-title">TPS Capacity Utilization</h3>
+                <p class="chart-description">
+                    This chart shows the utilization rate of the financial TPS capacity over time.
+                </p>
+                 <div class="chart-canvas-container">
+                    <canvas id="utilizationChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-section">
+                <h3 class="chart-title">Customer Growth</h3>
+                <p class="chart-description">
+                    Total number of customers over time.
+                </p>
+                 <div class="chart-canvas-container">
+                    <canvas id="customerGrowthChart"></canvas>
+                </div>
+            </div>
+
+        </div>
+
+        <div id="eod-view" class="tab-content">
+             <div class="chart-section">
+                <h3 class="chart-title">EOD Processing Time</h3>
+                <p class="chart-description">
+                    EOD processing time significantly decreased from 6 hours to under 3 hours due to optimization of the EOD codebase,
+                    improving performance and reducing processing time.
+                </p>
+                 <div class="chart-canvas-container">
+                    <canvas id="eodChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="key-changes-view" class="tab-content">
+             <h3 class="text-xl font-semibold mb-4 text-gray-800">Key Optimizations and Changes</h3>
+
+             <div class="key-changes-chart-container">
+                 <canvas id="keyChangesPieChart"></canvas>
+             </div>
+
+
+             <div class="key-changes-pillar" data-pillar="application">
+                 <h4 class="key-changes-pillar-title">Application Layer Optimizations</h4>
+                 <div class="key-changes-details">
+                     <p class="mb-2"><strong>Code Refactoring and Algorithm Improvements:</strong> Tối ưu hóa các thuật toán xử lý giao dịch, giảm độ phức tạp của mã nguồn, loại bỏ các bottleneck trong luồng xử lý chính.</p>
+                     <p class="mb-2"><strong>Caching Strategies:</strong> Triển khai các lớp caching hiệu quả ở các tầng khác nhau (ví dụ: Redis, Memcached) để giảm tải cho database và tăng tốc độ truy xuất dữ liệu thường xuyên sử dụng.</p>
+                     <p class="mb-2"><strong>Asynchronous Processing:</strong> Chuyển đổi các tác vụ không yêu cầu phản hồi ngay lập tức (ví dụ: gửi thông báo, xử lý batch) sang mô hình bất đồng bộ sử dụng message queues (ví dụ: Kafka, RabbitMQ) để giải phóng tài nguyên xử lý online.</p>
+                     <p class="mb-2"><strong>Microservices Adoption/Refinement:</strong> Chia nhỏ các module lớn thành các dịch vụ nhỏ hơn, độc lập, dễ quản lý và mở rộng. Tối ưu hóa giao tiếp giữa các microservices.</p>
+                     <p><strong>API Performance Tuning:</strong> Tối ưu hóa hiệu suất các API public và internal, giảm thiểu thời gian phản hồi và tăng khả năng chịu tải thông qua profiling và tuning.</p>
+                 </div>
+             </div>
+
+             <div class="key-changes-pillar" data-pillar="database">
+                 <h4 class="key-changes-pillar-title">Database Layer Optimizations</h4>
+                 <div class="key-changes-details">
+                     <p class="mb-2"><strong>Indexing Strategy Review and Optimization:</strong> Phân tích và tạo/điều chỉnh các index hiệu quả cho các truy vấn thường xuyên, loại bỏ các index không cần thiết gây overhead.</p>
+                     <p class="mb-2"><strong>Query Optimization and Tuning:</strong> Phân tích các truy vấn chậm (slow queries), viết lại hoặc tối ưu hóa cấu trúc truy vấn để giảm thời gian thực thi.</p>
+                     <p class="mb-2"><strong>Database Partitioning:</strong> Chia nhỏ các bảng dữ liệu lớn thành các partition nhỏ hơn dựa trên tiêu chí phù hợp (ví dụ: thời gian, khu vực) để cải thiện hiệu suất truy vấn và quản lý dữ liệu.</p>
+                     <p class="mb-2"><strong>Connection Pooling Tuning:</strong> Tối ưu hóa cấu hình connection pool để quản lý hiệu quả số lượng kết nối đến database, tránh tình trạng quá tải hoặc thiếu hụt kết nối.</p>
+                     <p class="mb-2"><strong>Replication and Sharding Strategies:</strong> Triển khai hoặc tối ưu hóa các giải pháp replication (Master-Replica) và sharding để phân tán tải đọc/ghi và tăng khả năng mở rộng.</p>
+                     <p><strong>Database Server Configuration Tuning:</strong> Tinh chỉnh các tham số cấu hình của database server (ví dụ: bộ nhớ cache, buffer sizes) để phù hợp với workload của hệ thống.</p>
+                 </div>
+             </div>
+
+             <div class="key-changes-pillar" data-pillar="infra">
+                 <h4 class="key-changes-pillar-title">Infrastructure Layer Optimizations</h4>
+                 <div class="key-changes-details">
+                     <p class="mb-2"><strong>Hardware Upgrades:</strong> Nâng cấp CPU, RAM, ổ cứng (ưu tiên SSD tốc độ cao) cho các server ứng dụng và database.</p>
+                     <p class="mb-2"><strong>Network Optimization:</strong> Tối ưu hóa cấu hình mạng, băng thông, giảm độ trễ giữa các thành phần hệ thống (ứng dụng, database, cache servers).</p>
+                     <p class="mb-2"><strong>Load Balancing and Auto-scaling:</strong> Triển khai hoặc tối ưu hóa các giải pháp load balancing để phân phối tải đồng đều trên các server ứng dụng. Cấu hình auto-scaling để tự động điều chỉnh số lượng server dựa trên tải thực tế.</p>
+                     <p class="mb-2"><strong>Virtualization/Containerization Benefits:</strong> Tận dụng hiệu quả các nền tảng ảo hóa (VMware, KVM) hoặc container (Docker, Kubernetes) để quản lý tài nguyên linh hoạt và tối ưu hóa việc sử dụng phần cứng.</p>
+                     <p><strong>Monitoring and Alerting Improvements:</strong> Cài đặt và tinh chỉnh các công cụ giám sát hiệu suất (performance monitoring tools) cho toàn bộ stack (ứng dụng, database, server, network) và cấu hình các cảnh báo (alerts) sớm để phát hiện và xử lý sự cố kịp thời.</p>
+                 </div>
+             </div>
+        </div>
+
+
+        <div class="bottom-section">
+            <div id="table-view" class="tab-content">
+                <h3 class="chart-title">Performance Data Table</h3>
+                <div class="table-container">
+                    <table id="performance-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>TPS Fin Avg</th>
+                                <th>TPS Non Fin</th>
+                                <th>TPS Non Fin Capacity</th>
+                                <th>TPS Fin Capacity</th>
+                                 <th>Response Time (ms) (Financial)</th>
+                                <th>EOD</th>
+                                <th>Utilization (%)</th>
+                                <th>Non-Fin Utilization (%)</th>
+                                <th>Financial Transaction Volume (Billions)</th>
+                                <th>Customer Count (Millions)</th>
+                                <th>Customer Growth (%)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+             <button id="export-pdf-btn" class="button button-success mt-4">Export to PDF</button>
+        </div>
+    </div>
+
+    <div id="loading" class="loading-indicator">
+        Exporting to PDF...
+    </div>
+
+    <script>
+        // Register the datalabels plugin globally
+        Chart.register(ChartDataLabels);
+
+        // Data from the provided image and additional capacity data
+        const performanceData = [
+            { name: 'Golive', tpsFin: 200, tpsNonFin: 10000, tpsFinCapacity: 500, tpsNonFinCapacity: 20000, eod: '6 hours', responseTime: 12, transactionVolume: 2.50 }, // Calculated
+            { name: 'Y1', tpsFin: 300, tpsNonFin: 8000, tpsFinCapacity: 1000, tpsNonFinCapacity: 20000, eod: '4 hours', responseTime: 7, transactionVolume: 3.38 }, // Calculated
+            { name: 'Y2', tpsFin: 400, tpsNonFin: 6000, tpsFinCapacity: 4000, tpsNonFinCapacity: 20000, eod: '< 3 hours', responseTime: 5, transactionVolume: 4.50 } // Provided
+        ];
+
+         // Customer data (assuming Golive, Y1, Y2)
+         const customerData = [
+             { name: 'Golive', count: 16.7 },
+             { name: 'Y1', count: 19.9 },
+             { name: 'Y2', count: 22.6 }
+         ];
+
+
+        // Calculate utilization data and growth percentages
+        const utilizationData = performanceData.map((item, index) => {
+            const prevItem = index > 0 ? performanceData[index - 1] : null;
+            const transactionVolumeGrowth = prevItem ? Math.round(((item.transactionVolume - prevItem.transactionVolume) / prevItem.transactionVolume) * 100) : null;
+            return {
+                ...item,
+                utilizationRate: Math.round((item.tpsFin / item.tpsFinCapacity) * 100),
+                nonFinUtilizationRate: Math.round((item.tpsNonFin / item.tpsNonFinCapacity) * 100),
+                transactionVolumeGrowth: transactionVolumeGrowth // Add growth percentage
+            };
+        });
+
+         // Calculate customer growth percentage (relative to previous year)
+         const customerGrowthData = customerData.map((item, index) => {
+             const prevItem = index > 0 ? customerData[index - 1] : null;
+             const growthRate = prevItem ? Math.round(((item.count - prevItem.count) / prevItem.count) * 100) : null; // Calculate growth rate in percentage
+             return {
+                 ...item,
+                 growthRate: growthRate
+             };
+         });
+
+
+        // Function to convert EOD time string to numeric hours
+        function getEodHours(eodString) {
+            if (eodString === '< 3 hours') {
+                return 2.5; // Approximation
+            }
+            return parseInt(eodString.split(' ')[0]);
+        }
+
+        // Prepare data for Chart.js
+        const labels = performanceData.map(item => item.name); // Labels for TPS, EOD, Transaction Volume, Response Time
+        const customerLabels = customerData.map(item => item.name); // Labels for Customer Growth
+
+        const tpsFinAvg = performanceData.map(item => item.tpsFin);
+        const tpsNonFin = performanceData.map(item => item.tpsNonFin);
+        const tpsFinCapacity = performanceData.map(item => item.tpsFinCapacity);
+        const eodHours = performanceData.map(item => getEodHours(item.eod));
+        const utilizationRates = utilizationData.map(item => item.utilizationRate);
+        const responseTime = performanceData.map(item => item.responseTime);
+        const transactionVolume = performanceData.map(item => item.transactionVolume);
+        const transactionVolumeGrowth = utilizationData.map(item => item.transactionVolumeGrowth); // Growth data
+
+         const customerCounts = customerData.map(item => item.count); // Customer counts
+         const customerGrowthRates = customerGrowthData.map(item => item.growthRate); // Customer growth rates
+
+
+        // Chart configurations
+        const tpsFinChartConfig = {
+            type: 'bar', // Changed to bar chart for Actual TPS
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'TPS Fin Actual',
+                        data: tpsFinAvg,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)', // Added background color for bars
+                         type: 'bar', // Explicitly set type for this dataset
+                         datalabels: { // Datalabels configuration for this dataset
+                            anchor: 'end', // Position the label at the end of the bar
+                            align: 'top', // Align the label to the top of the bar
+                            formatter: Math.round, // Format the label value
+                            color: '#000', // Label text color
+                            font: {
+                                weight: 'bold'
+                            }
+                        }
+                    },
+                     {
+                        label: 'TPS Fin Capacity',
+                        data: tpsFinCapacity,
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        fill: false,
+                        tension: 0.1,
+                        type: 'line', // Explicitly set type for this dataset
+                         datalabels: { // Datalabels configuration for this dataset
+                            anchor: 'end', // Position the label at the end of the line
+                            align: 'end', // Align the label to the end of the line
+                            offset: 5, // Move the label 5 pixels up
+                            formatter: Math.round, // Format the label value
+                            color: '#000', // Label text color
+                            font: {
+                                weight: 'bold'
+                            }
+                        }
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false, // Allow aspect ratio to be controlled by container
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 5000, // Set max value for Y-axis
+                        title: {
+                            display: true,
+                            text: 'Transactions Per Second'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.raw;
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        const tpsNonFinChartConfig = {
+            type: 'bar', // Changed to bar chart for Actual TPS
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'TPS Non Fin Actual',
+                        data: tpsNonFin,
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.6)', // Added background color for bars
+                        type: 'bar', // Explicitly set type for this dataset
+                         datalabels: { // Datalabels configuration for this dataset
+                            anchor: 'end', // Position the label at the end of the bar
+                            align: 'top', // Align the label to the top of the bar
+                            formatter: Math.round, // Format the label value
+                            color: '#000', // Label text color
+                             font: {
+                                weight: 'bold'
+                            }
+                        }
+                    },
+                     {
+                        label: 'TPS Non Fin Capacity',
+                        data: performanceData.map(item => item.tpsNonFinCapacity), // Assuming fixed capacity
+                        borderColor: 'rgba(255, 159, 64, 1)',
+                        backgroundColor: 'rgba(255, 159, 64, 0.2)',
+                        fill: false,
+                        tension: 0.1,
+                        type: 'line', // Explicitly set type for this dataset
+                         datalabels: { // Datalabels configuration for this dataset
+                            anchor: 'end', // Position the label at the end of the line
+                            align: 'end', // Align the label to the end of the line
+                             offset: 5, // Move the label 5 pixels up
+                            formatter: Math.round, // Format the label value
+                            color: '#000', // Label text color
+                             font: {
+                                weight: 'bold'
+                            }
+                        }
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                         max: 30000, // Set max value for Y-axis
+                        title: {
+                            display: true,
+                            text: 'Transactions Per Second'
+                        }
+                    }
+                },
+                 plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.raw;
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        // Updated Response Time Chart Configuration
+        const responseTimeChartConfig = {
+             type: 'line', // Line chart for trend
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Response Time (ms)',
+                        data: responseTime,
+                        borderColor: 'rgba(148, 0, 211, 1)', // Purple color
+                        backgroundColor: 'rgba(148, 0, 211, 0.2)',
+                        fill: false,
+                        tension: 0.1,
+                         datalabels: { // Datalabels configuration for this dataset
+                            anchor: 'end',
+                            align: 'top',
+                            formatter: (value) => value + 'ms', // Format as milliseconds
+                            color: '#000',
+                             font: {
+                                weight: 'bold'
+                            }
+                        }
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Milliseconds (ms)'
+                        }
+                    }
+                },
+                 plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.raw + ' ms';
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        // New Transaction Volume Chart Configuration
+         const transactionVolumeChartConfig = {
+             type: 'bar', // Bar chart for volume
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Financial Transaction Volume (Billions)',
+                        data: transactionVolume,
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)', // Green color
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1,
+                         datalabels: { // Datalabels configuration for this dataset
+                            anchor: 'end',
+                            align: 'top',
+                            formatter: (value) => value + 'B', // Format in Billions
+                            color: '#000',
+                             font: {
+                                weight: 'bold'
+                            }
+                        }
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Volume (Billions)'
+                        }
+                    }
+                },
+                 plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.raw + ' Billions';
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        // New Customer Growth Chart Configuration
+        const customerGrowthChartConfig = {
+             type: 'bar', // Bar chart for customer count
+            data: {
+                labels: customerLabels, // Use customer labels (Y1, Y2, Y3)
+                datasets: [
+                    {
+                        label: 'Customer Count (Millions)',
+                        data: customerCounts,
+                        backgroundColor: 'rgba(153, 102, 255, 0.6)', // Purple color
+                        borderColor: 'rgba(153, 102, 255, 1)',
+                        borderWidth: 1,
+                         datalabels: { // Datalabels for customer count
+                            anchor: 'end',
+                            align: 'top',
+                            formatter: (value) => value + 'M', // Format in Millions
+                            color: '#000',
+                             font: {
+                                weight: 'bold'
+                            }
+                        },
+                         yAxisID: 'customer-y-axis' // Assign to customer Y-axis
+                    }
+                    // Removed the growth rate dataset
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    'customer-y-axis': { // Configuration for the customer count Y-axis
+                        type: 'linear',
+                        position: 'left',
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Customer Count (Millions)'
+                        }
+                    },
+                     // Removed the second Y-axis for growth rate
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    }
+                },
+                 plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.dataset.label === 'Customer Count (Millions)') {
+                                     label += context.raw + ' Million';
+                                } else {
+                                     label += context.raw;
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+
+         const utilizationChartConfig = {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'TPS Fin Utilization (%)',
+                        data: utilizationRates,
+                        backgroundColor: 'rgba(153, 102, 255, 0.6)',
+                        borderColor: 'rgba(153, 102, 255, 1)',
+                        borderWidth: 1,
+                         datalabels: { // Datalabels configuration for this dataset
+                            anchor: 'end',
+                            align: 'top',
+                            formatter: (value) => value + '%', // Format as percentage
+                            color: '#000',
+                             font: {
+                                weight: 'bold'
+                            }
+                        }
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100, // Utilization is max 100%
+                        title: {
+                            display: true,
+                            text: 'Utilization Rate (%)'
+                        }
+                    }
+                },
+                 plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.raw + '%';
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+
+        const eodChartConfig = {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'EOD Time (Hours)',
+                        data: eodHours,
+                        backgroundColor: 'rgba(255, 205, 86, 0.6)',
+                        borderColor: 'rgba(255, 205, 86, 1)',
+                        borderWidth: 1,
+                         datalabels: { // Datalabels configuration for this dataset
+                            anchor: 'end',
+                            align: 'top',
+                            formatter: (value) => value + 'h', // Format as hours
+                            color: '#000',
+                             font: {
+                                weight: 'bold'
+                            }
+                        }
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Hours'
+                        }
+                    }
+                },
+                 plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.raw + ' hours';
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        // Key Changes Pie Chart Configuration
+        const keyChangesPieChartConfig = {
+            type: 'pie',
+            data: {
+                labels: ['Application', 'Database', 'Infra'],
+                datasets: [{
+                    data: [40, 35, 25], // Example percentages (adjust as needed)
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.6)', // Red
+                        'rgba(54, 162, 235, 0.6)', // Blue
+                        'rgba(255, 205, 86, 0.6)'  // Yellow
+                    ],
+                    borderColor: [
+                        'rgba(255, 99, 132, 1)',
+                        'rgba(54, 162, 235, 1)',
+                        'rgba(255, 205, 86, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                 plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.raw + '%';
+                                return label;
+                            }
+                        }
+                    },
+                     datalabels: { // Datalabels for pie chart
+                        formatter: (value, context) => {
+                            return context.chart.data.labels[context.dataIndex] + ': ' + value + '%';
+                        },
+                        color: '#000',
+                        font: {
+                            weight: 'bold'
+                        }
+                    }
+                }
+            }
+        };
+
+
+        let tpsFinChart, tpsNonFinChart, responseTimeChart, transactionVolumeChart, customerGrowthChart, utilizationChart, eodChart, keyChangesPieChart;
+
+        // Function to render charts for the active tab
+        function renderActiveTabCharts(activeTab) {
+             destroyCharts(); // Destroy all charts first
+
+            if (activeTab === 'online') {
+                const tpsFinCanvas = document.getElementById('tpsFinChart');
+                if (tpsFinCanvas) {
+                    const ctxTpsFin = tpsFinCanvas.getContext('2d');
+                    tpsFinChart = new Chart(ctxTpsFin, tpsFinChartConfig);
+                }
+
+                const tpsNonFinCanvas = document.getElementById('tpsNonFinChart');
+                 if (tpsNonFinCanvas) {
+                    const ctxTpsNonFin = tpsNonFinCanvas.getContext('2d');
+                    tpsNonFinChart = new Chart(ctxTpsNonFin, tpsNonFinChartConfig);
+                 }
+
+                const responseTimeCanvas = document.getElementById('responseTimeChart');
+                 if (responseTimeCanvas) {
+                    const ctxResponseTime = responseTimeCanvas.getContext('2d');
+                    responseTimeChart = new Chart(ctxResponseTime, responseTimeChartConfig);
+                 }
+
+                 const transactionVolumeCanvas = document.getElementById('transactionVolumeChart');
+                 if (transactionVolumeCanvas) {
+                     const ctxTransactionVolume = transactionVolumeCanvas.getContext('2d');
+                    transactionVolumeChart = new Chart(ctxTransactionVolume, transactionVolumeChartConfig);
+                 }
+
+                 const customerGrowthCanvas = document.getElementById('customerGrowthChart');
+                 if (customerGrowthCanvas) {
+                     const ctxCustomerGrowth = customerGrowthCanvas.getContext('2d');
+                    customerGrowthChart = new Chart(ctxCustomerGrowth, customerGrowthChartConfig);
+                 }
+
+
+                // Only render utilization chart if checkbox is checked and in online tab
+                const utilizationCheckbox = document.getElementById('utilization-checkbox');
+                const utilizationChartCanvas = document.getElementById('utilizationChart');
+                if (utilizationCheckbox.checked && utilizationChartCanvas) {
+                     const ctxUtilization = utilizationChartCanvas.getContext('2d');
+                     utilizationChart = new Chart(ctxUtilization, utilizationChartConfig);
+                }
+
+            } else if (activeTab === 'eod') {
+                const eodCanvas = document.getElementById('eodChart');
+                 if (eodCanvas) {
+                    const ctxEod = eodCanvas.getContext('2d');
+                    eodChart = new Chart(ctxEod, eodChartConfig);
+                 }
+            } else if (activeTab === 'key-changes') {
+                 const keyChangesPieCanvas = document.getElementById('keyChangesPieChart');
+                 if (keyChangesPieCanvas) {
+                     const ctxKeyChangesPie = keyChangesPieCanvas.getContext('2d');
+                     keyChangesPieChart = new Chart(ctxKeyChangesPie, keyChangesPieChartConfig);
+                 }
+            }
+             // Table tab doesn't have charts
+        }
+
+
+        // Function to destroy all charts
+        function destroyCharts() {
+            if (tpsFinChart) { tpsFinChart.destroy(); tpsFinChart = null; }
+            if (tpsNonFinChart) { tpsNonFinChart.destroy(); tpsNonFinChart = null; }
+             if (responseTimeChart) { responseTimeChart.destroy(); responseTimeChart = null; } // Destroy Response Time chart
+             if (transactionVolumeChart) { transactionVolumeChart.destroy(); transactionVolumeChart = null; } // Destroy Transaction Volume chart
+             if (customerGrowthChart) { customerGrowthChart.destroy(); customerGrowthChart = null; } // Destroy Customer Growth chart
+            if (eodChart) { eodChart.destroy(); eodChart = null; }
+            if (utilizationChart) { utilizationChart.destroy(); utilizationChart = null; }
+             if (keyChangesPieChart) { keyChangesPieChart.destroy(); keyChangesPieChart = null; } // Destroy Key Changes pie chart
+        }
+
+        // Function to render the data table
+        function renderTable() {
+            const tableBody = document.querySelector('#performance-table tbody');
+            tableBody.innerHTML = ''; // Clear existing rows
+
+            // Iterate through performanceData (Golive, Y1, Y2) to build rows
+            performanceData.forEach((rowData, index) => {
+                const row = tableBody.insertRow();
+                row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+
+                row.insertCell().textContent = rowData.name;
+                row.insertCell().textContent = rowData.tpsFin;
+                row.insertCell().textContent = rowData.tpsNonFin;
+                row.insertCell().textContent = utilizationData[index].nonFinUtilizationRate + '%'; // Use calculated utilization
+                row.insertCell().textContent = rowData.tpsFinCapacity;
+                row.insertCell().textContent = rowData.responseTime;
+                row.insertCell().textContent = rowData.eod;
+                row.insertCell().textContent = utilizationData[index].utilizationRate + '%'; // Use calculated utilization
+                row.insertCell().textContent = utilizationData[index].nonFinUtilizationRate + '%'; // Use calculated non-fin utilization
+                row.insertCell().textContent = rowData.transactionVolume;
+
+                // Find corresponding customer data for the current year name (Golive, Y1, Y2)
+                const customerDataForYear = customerData.find(customerItem => customerItem.name === rowData.name); // Use customerData here
+                row.insertCell().textContent = customerDataForYear ? customerDataForYear.count : '-'; // Customer Count
+
+                 // Find corresponding customer growth data for the current year name (Golive, Y1, Y2)
+                 const customerGrowthForYear = customerGrowthData.find(customerItem => customerItem.name === rowData.name); // Use customerGrowthData here
+                 row.insertCell().textContent = customerGrowthForYear && customerGrowthForYear.growthRate !== null ? customerGrowthForYear.growthRate + '%' : '-'; // Customer Growth Rate
+            });
+        }
+
+        // Get tab buttons and views
+        const onlineTabBtn = document.getElementById('online-tab-btn');
+        const eodTabBtn = document.getElementById('eod-tab-btn');
+        const keyChangesTabBtn = document.getElementById('key-changes-tab-btn'); // Get Key Changes tab button
+        const tableTabBtn = document.getElementById('table-tab-btn');
+        const onlineView = document.getElementById('online-view');
+        const eodView = document.getElementById('eod-view');
+        const keyChangesView = document.getElementById('key-changes-view'); // Get Key Changes view
+        const tableView = document.getElementById('table-view');
+
+        const exportPdfBtn = document.getElementById('export-pdf-btn');
+        const utilizationCheckbox = document.getElementById('utilization-checkbox');
+        const utilizationChartSection = document.getElementById('utilization-chart-section');
+        const loadingIndicator = document.getElementById('loading');
+
+        // Get Key Changes pillar elements
+        const keyChangesPillars = document.querySelectorAll('.key-changes-pillar');
+
+
+        // Function to switch tabs
+        function switchTab(tab) {
+            // Reset all button styles to default tab style
+            onlineTabBtn.classList.remove('active');
+            eodTabBtn.classList.remove('active');
+            keyChangesTabBtn.classList.remove('active'); // Reset Key Changes tab style
+            tableTabBtn.classList.remove('active');
+
+            // Hide all views
+            onlineView.style.display = 'none';
+            eodView.style.display = 'none';
+            keyChangesView.style.display = 'none'; // Hide Key Changes view
+            tableView.style.display = 'none';
+
+            // Activate selected tab and show its view
+            if (tab === 'online') {
+                onlineTabBtn.classList.add('active');
+                onlineView.style.display = 'block';
+                 exportPdfBtn.style.display = 'inline-block'; // Show export button
+                 renderActiveTabCharts('online'); // Render charts for online tab
+            } else if (tab === 'eod') {
+                eodTabBtn.classList.add('active');
+                eodView.style.display = 'block';
+                 exportPdfBtn.style.display = 'inline-block'; // Show export button
+                 renderActiveTabCharts('eod'); // Render charts for EOD tab
+            } else if (tab === 'key-changes') { // Handle Key Changes tab
+                keyChangesTabBtn.classList.add('active');
+                keyChangesView.style.display = 'block';
+                 exportPdfBtn.style.display = 'inline-block'; // Show export button
+                 renderActiveTabCharts('key-changes'); // Render pie chart for Key Changes
+                 // Initially hide all details in Key Changes tab
+                 keyChangesView.querySelectorAll('.key-changes-details').forEach(detail => detail.style.display = 'none');
+
+            }
+            else if (tab === 'table') {
+                tableTabBtn.classList.add('active');
+                tableView.style.display = 'block';
+                 exportPdfBtn.style.display = 'inline-block'; // Show export button
+                 destroyCharts(); // No charts in table view
+                 renderTable(); // Render table
+            }
+        }
+
+        // Event listeners for tab buttons
+        onlineTabBtn.addEventListener('click', () => switchTab('online'));
+        eodTabBtn.addEventListener('click', () => switchTab('eod'));
+        keyChangesTabBtn.addEventListener('click', () => switchTab('key-changes')); // Add event listener for Key Changes tab
+        tableTabBtn.addEventListener('click', () => switchTab('table'));
+
+
+        // Event listener for utilization checkbox (only affects online tab)
+        utilizationCheckbox.addEventListener('change', () => {
+             const currentActiveTab = document.querySelector('.tab-button.active').id; // Get the ID of the currently active tab button
+             if (currentActiveTab === 'online-tab-btn') { // Only update if the online tab is active
+                if (utilizationCheckbox.checked) {
+                    utilizationChartSection.style.display = 'block';
+                    // Re-render charts to include/exclude the utilization chart
+                    renderActiveTabCharts('online');
+                } else {
+                    utilizationChartSection.style.display = 'none';
+                     // Re-render charts to include/exclude the utilization chart
+                    renderActiveTabCharts('online');
+                }
+             }
+        });
+
+         // Event listeners for Key Changes pillars
+         keyChangesPillars.forEach(pillar => {
+             pillar.addEventListener('click', () => {
+                 const details = pillar.querySelector('.key-changes-details');
+                 if (details) {
+                     // Toggle display of details
+                     const isHidden = details.style.display === 'none' || details.style.display === '';
+                     details.style.display = isHidden ? 'block' : 'none';
+                 }
+             });
+         });
+
+
+        // Event listener for PDF export button
+        exportPdfBtn.addEventListener('click', async () => {
+             loadingIndicator.style.display = 'flex'; // Show loading indicator
+             exportPdfBtn.disabled = true; // Disable button during export
+
+            const input = document.getElementById('performance-dashboard');
+
+            try {
+                // Clone the element to avoid modifying the live DOM during capture
+                const inputClone = input.cloneNode(true);
+                // Remove elements that should not be in the PDF, e.g., buttons
+                inputClone.querySelector('.tab-buttons').remove(); // Remove tab buttons row
+                inputClone.querySelector('#export-pdf-btn').remove(); // Remove the export button itself
+
+
+                 // Temporarily show all views in the clone for capture
+                 inputClone.querySelector('#online-view').style.display = 'block';
+                 inputClone.querySelector('#eod-view').style.display = 'block';
+                 inputClone.querySelector('#key-changes-view').style.display = 'block'; // Show Key Changes view in clone
+                 inputClone.querySelector('#table-view').style.display = 'block';
+
+                 // Ensure utilization chart is visible in the clone if checked in the original view
+                 const originalUtilizationCheckbox = document.getElementById('utilization-checkbox');
+                 if (originalUtilizationCheckbox.checked) {
+                     inputClone.querySelector('#utilization-chart-section').style.display = 'block';
+                 } else {
+                     inputClone.querySelector('#utilization-chart-section').style.display = 'none';
+                 }
+
+                 // Ensure all key changes details are visible in the clone for capture
+                 inputClone.querySelectorAll('#key-changes-view .key-changes-details').forEach(detail => detail.style.display = 'block');
+
+
+                 // Temporarily append clone to body to ensure styles are applied
+                 document.body.appendChild(inputClone);
+
+                // Render charts in the cloned element before capturing
+                 const ctxTpsFinClone = inputClone.querySelector('#tpsFinChart').getContext('2d');
+                 new Chart(ctxTpsFinClone, tpsFinChartConfig);
+
+                 const ctxTpsNonFinClone = inputClone.querySelector('#tpsNonFinChart').getContext('2d');
+                 new Chart(ctxTpsNonFinClone, tpsNonFinChartConfig);
+
+                 const ctxResponseTimeClone = inputClone.querySelector('#responseTimeChart').getContext('2d');
+                 new Chart(ctxResponseTimeClone, responseTimeChartConfig);
+
+                 const ctxEodClone = inputClone.querySelector('#eodChart').getContext('2d');
+                 new Chart(ctxEodClone, eodChartConfig);
+
+                 const ctxTransactionVolumeClone = inputClone.querySelector('#transactionVolumeChart').getContext('2d');
+                 new Chart(ctxTransactionVolumeClone, transactionVolumeChartConfig);
+
+                 const ctxCustomerGrowthClone = inputClone.querySelector('#customerGrowthChart').getContext('2d');
+                 new Chart(ctxCustomerGrowthClone, customerGrowthChartConfig);
+
+                 const keyChangesPieCanvasClone = inputClone.querySelector('#keyChangesPieChart');
+                 if (keyChangesPieCanvasClone) {
+                      const ctxKeyChangesPieClone = keyChangesPieCanvasClone.getContext('2d');
+                      new Chart(ctxKeyChangesPieClone, keyChangesPieChartConfig);
+                 }
+
+
+                 if (originalUtilizationCheckbox.checked) {
+                     const ctxUtilizationClone = inputClone.querySelector('#utilizationChart').getContext('2d');
+                     new Chart(ctxUtilizationClone, utilizationChartConfig);
+                 }
+
+                 // Render table in the cloned element
+                 const tableBodyClone = inputClone.querySelector('#performance-table tbody');
+                 tableBodyClone.innerHTML = ''; // Clear existing rows
+                 // Iterate through performanceData (Golive, Y1, Y2) to build rows for the clone
+                 performanceData.forEach((rowData, index) => {
+                    const row = tableBodyClone.insertRow();
+                    row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                    row.insertCell().textContent = rowData.name;
+                    row.insertCell().textContent = rowData.tpsFin;
+                    row.insertCell().textContent = rowData.tpsNonFin;
+                    row.insertCell().textContent = utilizationData[index].nonFinUtilizationRate + '%'; // Use calculated utilization
+                    row.insertCell().textContent = rowData.tpsFinCapacity;
+                    row.insertCell().textContent = rowData.responseTime;
+                    row.insertCell().textContent = rowData.eod;
+                    row.insertCell().textContent = utilizationData[index].utilizationRate + '%'; // Use calculated utilization
+                    row.insertCell().textContent = utilizationData[index].nonFinUtilizationRate + '%'; // Use calculated non-fin utilization
+                    row.insertCell().textContent = rowData.transactionVolume;
+                     row.insertCell().textContent = utilizationData[index].transactionVolumeGrowth !== null ? utilizationData[index].transactionVolumeGrowth + '%' : '-';
+                     const customerDataForYear = customerData.find(customerItem => customerItem.name === rowData.name); // Use customerData here
+                     row.insertCell().textContent = customerDataForYear ? customerDataForYear.count : '-'; // Customer Count
+                     const customerGrowthForYear = customerGrowthData.find(customerItem => customerItem.name === rowData.name); // Use customerGrowthData here
+                     row.insertCell().textContent = customerGrowthForYear && customerGrowthForYear.growthRate !== null ? customerGrowthForYear.growthRate + '%' : '-'; // Customer Growth Rate
+                });
+
+
+                const canvas = await html2canvas(inputClone, { scale: 2 });
+                const imgData = canvas.toDataURL('image/png');
+
+                // Remove the clone from the body
+                document.body.removeChild(inputClone);
+
+
+                const pdf = new window.jspdf.jsPDF('p', 'mm', 'a4');
+                const imgWidth = 210;
+                const pageHeight = 297;
+                const imgHeight = canvas.height * imgWidth / canvas.width;
+                let heightLeft = imgHeight;
+                let position = 0;
+
+                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+
+                while (heightLeft >= 0) {
+                    position = heightLeft - imgHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+                }
+
+                pdf.save('core-banking-performance.pdf');
+            } catch (error) {
+                console.error("Error during PDF export:", error);
+                alert("Failed to export PDF. Please try again."); // Simple error notification
+            } finally {
+                 loadingIndicator.style.display = 'none'; // Hide loading indicator
+                 exportPdfBtn.disabled = false; // Re-enable button
+            }
+        });
+
+
+        // Initial render on page load
+        window.onload = () => {
+            switchTab('online'); // Start with the online charts view
+        };
+
+         // Ensure charts are responsive on window resize
+        window.addEventListener('resize', () => {
+             const currentActiveTab = document.querySelector('.tab-button.active').id;
+             if (currentActiveTab === 'online-tab-btn') {
+                 if (tpsFinChart) tpsFinChart.resize();
+                 if (tpsNonFinChart) tpsNonFinChart.resize();
+                 if (responseTimeChart) responseTimeChart.resize();
+                  if (transactionVolumeChart) transactionVolumeChart.resize(); // Resize Transaction Volume chart
+                   if (customerGrowthChart) customerGrowthChart.resize(); // Resize Customer Growth chart
+                  if (utilizationChart && document.getElementById('utilization-checkbox').checked) {
+                     utilizationChart.resize();
+                 }
+             } else if (currentActiveTab === 'eod-tab-btn') {
+                 if (eodChart) eodChart.resize();
+             } else if (currentActiveTab === 'key-changes-tab-btn') {
+                  if (keyChangesPieChart) keyChangesPieChart.resize(); // Resize Key Changes pie chart
+             }
+             // Table view doesn't have charts to resize
+        });
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lộ trình Golive 2025</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior-x: none; /* Ngăn cử chỉ vuốt để điều hướng trên một số trình duyệt */
+        }
+        .milestone-item {
+            /* Các style cơ bản, JS sẽ thêm màu nền */
+        }
+        .month-lane {
+            /* Các cột tháng sẽ chứa các milestone */
+        }
+        #milestoneTooltip {
+            /* Tooltip sẽ được định vị bởi JS */
+        }
+        #currentDateLine {
+            /* Kiểu dáng cho đường kẻ thời gian hiện tại sẽ được JS thêm vào */
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 p-4 sm:p-6 md:p-8">
+    <div class="container mx-auto max-w-7xl">
+        <!-- Milestone Controls -->
+
+
+        <!-- Modal for Add/Edit Milestone -->
+        <div id="milestoneModal" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[200] hidden">
+            <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md relative">
+                <button id="closeModalBtn" class="absolute top-2 right-2 text-gray-400 hover:text-red-500 text-xl">&times;</button>
+                <h2 id="modalTitle" class="text-lg font-bold mb-4">Thêm mốc Golive</h2>
+                <form id="milestoneForm" class="space-y-3">
+                    <div>
+                        <label class="block font-medium mb-1">Tên ngắn</label>
+                        <input id="shortNameInput" type="text" class="w-full border rounded px-2 py-1" required />
+                    </div>
+                    <div>
+                        <label class="block font-medium mb-1">Tên đầy đủ</label>
+                        <input id="fullNameInput" type="text" class="w-full border rounded px-2 py-1" required />
+                    </div>
+                    <div>
+                        <label class="block font-medium mb-1">Hạng mục</label>
+                        <input id="categoryInput" type="text" class="w-full border rounded px-2 py-1" required />
+                    </div>
+                    <div>
+                        <label class="block font-medium mb-1">Đơn vị</label>
+                        <input id="ownerInput" type="text" class="w-full border rounded px-2 py-1" required />
+                    </div>
+                    <div>
+                        <label class="block font-medium mb-1">Tháng</label>
+                        <input id="monthInput" type="number" min="1" max="12" class="w-full border rounded px-2 py-1" required />
+                    </div>
+                    <input type="hidden" id="editIdxInput" />
+                    <div class="flex gap-2 justify-end pt-2">
+                        <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded font-semibold">Lưu</button>
+                        <button type="button" id="deleteMilestoneBtn" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded font-semibold hidden">Xóa</button>
+                        <button type="button" id="cancelModalBtn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded font-semibold">Hủy</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <header class="mb-6 md:mb-10">
+            <h1 class="text-2xl sm:text-3xl md:text-4xl font-bold text-center text-sky-700">
+                Lộ trình Golive Ứng dụng Năm 2025
+            </h1>
+        </header>
+
+
+        <!-- Milestone Filter/Search Controls -->
+        <div class="flex flex-wrap gap-2 mb-4 items-center justify-center bg-white p-3 rounded shadow">
+            <select id="filterCategory" class="border rounded px-2 py-1 text-sm">
+                <option value="">Tất cả hạng mục</option>
+            </select>
+            <select id="filterOwner" class="border rounded px-2 py-1 text-sm">
+                <option value="">Tất cả đơn vị</option>
+            </select>
+            <input id="searchName" type="text" class="border rounded px-2 py-1 text-sm" placeholder="Tìm kiếm theo tên..." />
+            <button id="clearFilterBtn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm">Xóa lọc</button>
+            <button id="addMilestoneBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded text-sm font-semibold ml-2">Thêm mốc Golive</button>
+        </div>
+
+        <main id="timeline-main-container">
+            <div class="grid grid-cols-4 text-center mb-0 rounded-t-lg overflow-hidden">
+                <div class="font-semibold p-2.5 bg-sky-600 text-white text-sm sm:text-base border-r border-sky-700">Quý I (T1-T3)</div>
+                <div class="font-semibold p-2.5 bg-sky-600 text-white text-sm sm:text-base border-r border-sky-700">Quý II (T4-T6)</div>
+                <div class="font-semibold p-2.5 bg-sky-600 text-white text-sm sm:text-base border-r border-sky-700">Quý III (T7-T9)</div>
+                <div class="font-semibold p-2.5 bg-sky-600 text-white text-sm sm:text-base">Quý IV (T10-T12)</div>
+            </div>
+
+            <div class="timeline-grid-wrapper bg-slate-200 rounded-b-lg shadow-xl overflow-x-auto">
+                </div>
+        </main>
+
+        <div id="milestoneTooltip"
+             class="fixed bg-slate-800 text-white p-3 rounded-md shadow-xl text-sm z-[100] hidden
+                    opacity-0 transition-opacity duration-150 ease-in-out max-w-xs sm:max-w-sm pointer-events-none">
+            <h3 id="tooltipTitle" class="font-semibold text-base mb-1.5 text-sky-300"></h3>
+            <p id="tooltipCategory" class="text-xs text-slate-300 mb-1"></p>
+            <p id="tooltipOwner" class="text-xs text-slate-300"></p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Dữ liệu các mốc golive
+            const milestones = [
+              { month: 2, shortName: "CĐCS Chiến lược", fullName: "Chỉ đạo điều chỉnh, cập nhật, bổ sung Chiến lược (T1-T3)", category: "Chiến lược CNTT", owner: "Ban Công nghệ" },
+              { month: 3, shortName: "Core Release", fullName: "Core Release tháng 3", category: "Core Release", owner: "Ban Core" },
+              { month: 3, shortName: "Bcash GĐ2", fullName: "Golive Bcash GĐ 2", category: "Core Banking & Dự án", owner: "Ban Công nghệ và các Ban QLDA" },
+              { month: 3, shortName: "Payment Hub GĐ1", fullName: "Golive Payment Hub GĐ 1", category: "Core Banking & Dự án", owner: "Ban Công nghệ và các Ban QLDA" },
+              { month: 5, shortName: "AIO Teller P1", fullName: "Golive All In One Teller phase 1", category: "Core Banking & Dự án", owner: "Ban Công nghệ và các Ban QLDA" },
+              { month: 5, shortName: "Core Thẻ GĐ2", fullName: "Golive Core thẻ GĐ 2", category: "Core Banking & Dự án", owner: "Ban Công nghệ và các Ban QLDA" },
+              { month: 6, shortName: "Core Release", fullName: "Core Release tháng 6", category: "Core Release", owner: "Ban Core" },
+              { month: 7, shortName: "BCGS Chiến lược", fullName: "Báo cáo giám sát Chiến lược", category: "Chiến lược CNTT", owner: "Ban Công nghệ" },
+              { month: 7, shortName: "Bank 2.0", fullName: "Golive Bank 2.0", category: "Core Banking & Dự án", owner: "Ban Công nghệ và các Ban QLDA" },
+              { month: 7, shortName: "MBnB GĐ2", fullName: "Golive MBnB GĐ 2", category: "Core Banking & Dự án", owner: "Ban Công nghệ và các Ban QLDA" },
+              { month: 7, shortName: "Payment Hub GĐ2", fullName: "Golive Payment Hub GĐ 2", category: "Core Banking & Dự án", owner: "Ban Công nghệ và các Ban QLDA" },
+              { month: 9, shortName: "Core Release", fullName: "Core Release tháng 9", category: "Core Release", owner: "Ban Core" },
+              { month: 10, shortName: "Core CN Yangon", fullName: "Golive Core Banking tại CN Yangon", category: "Core Banking & Dự án", owner: "Ban Công nghệ và các Ban QLDA" },
+              { month: 10, shortName: "SCF GĐ1", fullName: "Golive dự án SCF GĐ 1", category: "Core Banking & Dự án", owner: "Ban Công nghệ và các Ban QLDA" },
+              { month: 10, shortName: "FX Hub", fullName: "Golive FX Hub", category: "Core Banking & Dự án", owner: "Ban Công nghệ và các Ban QLDA" },
+              { month: 11, shortName: "Core Release", fullName: "Core Release tháng 11", category: "Core Release", owner: "Ban Core" },
+              { month: 11, shortName: "AIO Teller P2", fullName: "Golive All In One Teller phase 2", category: "Core Banking & Dự án", owner: "Ban Công nghệ và các Ban QLDA" },
+              { month: 11, shortName: "Core Thẻ GĐ3", fullName: "Golive Core thẻ GĐ 3", category: "Core Banking & Dự án", owner: "Ban Công nghệ và các Ban QLDA" },
+              { month: 12, shortName: "BCGS Chiến lược", fullName: "Báo cáo giám sát Chiến lược", category: "Chiến lược CNTT", owner: "Ban Công nghệ" },
+              { month: 12, shortName: "SCF GĐ2", fullName: "Golive dự án SCF GĐ 2", category: "Core Banking & Dự án", owner: "Ban Công nghệ và các Ban QLDA" },
+            ];
+
+            // Màu sắc cho các hạng mục (sử dụng class của Tailwind CSS)
+            const categoryColors = {
+              "Chiến lược CNTT": "bg-sky-500 hover:bg-sky-600",
+              "Core Banking & Dự án": "bg-emerald-500 hover:bg-emerald-600",
+              "Core Release": "bg-fuchsia-500 hover:bg-fuchsia-600",
+              "Default": "bg-slate-500 hover:bg-slate-600"
+            };
+
+            const timelineGridWrapper = document.querySelector('.timeline-grid-wrapper');
+            
+            // Tạo lưới timeline (tiêu đề tháng và các làn milestone)
+            const timelineGrid = document.createElement('div');
+            // Thêm 'relative' để định vị tuyệt đối cho đường kẻ thời gian hiện tại
+            timelineGrid.className = 'timeline-grid min-w-[1000px] md:min-w-[1200px] lg:min-w-full relative'; 
+
+            const monthHeaderRow = document.createElement('div');
+            monthHeaderRow.className = 'grid grid-cols-12 sticky top-0 z-10 bg-slate-200 shadow-sm';
+
+            const milestoneLanesRow = document.createElement('div');
+            milestoneLanesRow.className = 'grid grid-cols-12 min-h-[450px] sm:min-h-[500px] md:min-h-[550px]';
+
+            for (let i = 1; i <= 12; i++) {
+                const headerCell = document.createElement('div');
+                headerCell.className = 'month-header text-center py-2.5 px-1 border-r border-b border-slate-300 bg-slate-50';
+                if (i === 12) headerCell.classList.add('border-r-0');
+                headerCell.innerHTML = `<span class="font-medium text-xs sm:text-sm text-slate-700">Tháng ${i}</span>`;
+                monthHeaderRow.appendChild(headerCell);
+
+                const laneCell = document.createElement('div');
+                laneCell.className = 'month-lane border-r border-slate-300 bg-white p-1.5 sm:p-2';
+                if (i === 12) laneCell.classList.add('border-r-0');
+                laneCell.id = `month-lane-${i}`;
+                milestoneLanesRow.appendChild(laneCell);
+            }
+
+            timelineGrid.appendChild(monthHeaderRow);
+            timelineGrid.appendChild(milestoneLanesRow);
+            timelineGridWrapper.appendChild(timelineGrid);
+
+            // Thêm đường kẻ thể hiện thời gian hiện tại
+            // Sử dụng ngày giờ được cung cấp: 08/05/2025, 15:07 (GMT+7)
+            const currentDate = new Date(2025, 4, 8, 15, 7, 0); // Tháng trong JS là 0-indexed (4 = tháng 5)
+            const currentYear = currentDate.getFullYear();
+
+            if (currentYear === 2025) {
+                const currentMonth = currentDate.getMonth(); // 0-indexed (ví dụ: 4 cho tháng 5)
+                const currentDay = currentDate.getDate();   // 1-indexed (ví dụ: 8)
+                const currentHour = currentDate.getHours(); // 0-23
+
+                // Kiểm tra xem các element cần thiết đã được render và có offsetHeight chưa
+                if (monthHeaderRow.offsetHeight && milestoneLanesRow.offsetHeight) {
+                    const daysInCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+                    
+                    // Tính toán tỉ lệ trôi qua trong ngày hiện tại
+                    const progressThroughDay = currentHour / 24;
+                    // Tính toán tỉ lệ trôi qua trong tháng hiện tại (bao gồm cả ngày hiện tại)
+                    const dayFraction = (currentDay - 1 + progressThroughDay) / daysInCurrentMonth;
+
+                    // Tính toán vị trí 'left' theo tỷ lệ phần trăm
+                    const leftPercentage = (currentMonth / 12) * 100 + (dayFraction / 12) * 100;
+
+                    const currentDateLine = document.createElement('div');
+                    currentDateLine.id = 'currentDateLine';
+                    currentDateLine.style.position = 'absolute';
+                    currentDateLine.style.left = `${leftPercentage}%`;
+                    currentDateLine.style.top = `${monthHeaderRow.offsetHeight}px`; // Ngay dưới header tháng
+                    currentDateLine.style.height = `${milestoneLanesRow.offsetHeight}px`; // Cao bằng khu vực milestones
+                    currentDateLine.style.width = '2px';
+                    currentDateLine.style.backgroundColor = 'red';
+                    currentDateLine.style.zIndex = '5'; // Trên các lane, dưới tooltip
+
+                    timelineGrid.appendChild(currentDateLine);
+                } else {
+                     // Fallback hoặc chờ cho đến khi offsetHeight có sẵn nếu cần thiết
+                    console.warn("offsetHeight for monthHeaderRow or milestoneLanesRow not immediately available. Line might not be positioned correctly initially.");
+                }
+            }
+
+            // Lấy các element của tooltip
+            const tooltip = document.getElementById('milestoneTooltip');
+            const tooltipTitle = document.getElementById('tooltipTitle');
+            const tooltipCategory = document.getElementById('tooltipCategory');
+            const tooltipOwner = document.getElementById('tooltipOwner');
+
+// Milestone CRUD + Drag/Drop
+let milestonesData = [];
+const LS_KEY = 'golive2025_milestones';
+
+function saveMilestones() {
+    localStorage.setItem(LS_KEY, JSON.stringify(milestonesData));
+}
+function loadMilestones() {
+    const data = localStorage.getItem(LS_KEY);
+    if (data) {
+        try {
+            milestonesData = JSON.parse(data);
+        } catch {
+            milestonesData = [...milestones];
+        }
+    } else {
+        milestonesData = [...milestones];
+    }
+}
+
+// --- Milestone Filtering & Rendering ---
+let filterCategory = '';
+let filterOwner = '';
+let searchName = '';
+
+function renderMilestones() {
+    // Xóa hết milestone hiện tại
+    for (let i = 1; i <= 12; i++) {
+        const lane = document.getElementById(`month-lane-${i}`);
+        if (lane) lane.innerHTML = '';
+    }
+    // Lọc dữ liệu
+    let filtered = milestonesData.filter(m => {
+        const matchCategory = !filterCategory || m.category === filterCategory;
+        const matchOwner = !filterOwner || m.owner === filterOwner;
+        const matchName = !searchName || m.shortName.toLowerCase().includes(searchName) || m.fullName.toLowerCase().includes(searchName);
+        return matchCategory && matchOwner && matchName;
+    });
+    filtered.forEach((milestone, idx) => {
+        const lane = document.getElementById(`month-lane-${milestone.month}`);
+        if (lane) {
+            const milestoneElement = createMilestoneElement(milestone, milestonesData.indexOf(milestone));
+            lane.appendChild(milestoneElement);
+        }
+    });
+}
+// --- Populate Filter Options ---
+function populateMilestoneFilters() {
+    const categorySet = new Set();
+    const ownerSet = new Set();
+    milestonesData.forEach(m => {
+        categorySet.add(m.category);
+        ownerSet.add(m.owner);
+    });
+    const filterCategoryEl = document.getElementById('filterCategory');
+    const filterOwnerEl = document.getElementById('filterOwner');
+    // Clear old options except first
+    filterCategoryEl.length = 1;
+    filterOwnerEl.length = 1;
+    Array.from(categorySet).sort().forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = cat;
+        filterCategoryEl.appendChild(opt);
+    });
+    Array.from(ownerSet).sort().forEach(owner => {
+        const opt = document.createElement('option');
+        opt.value = owner;
+        opt.textContent = owner;
+        filterOwnerEl.appendChild(opt);
+    });
+}
+
+// Enable drop on month lanes
+for (let i = 1; i <= 12; i++) {
+    const lane = document.getElementById(`month-lane-${i}`);
+    if (lane) {
+        lane.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            lane.classList.add('ring', 'ring-sky-400');
+        });
+        lane.addEventListener('dragleave', (e) => {
+            lane.classList.remove('ring', 'ring-sky-400');
+        });
+        lane.addEventListener('drop', (e) => {
+            e.preventDefault();
+            lane.classList.remove('ring', 'ring-sky-400');
+            const idx = e.dataTransfer.getData('text/plain');
+            if (typeof idx !== 'undefined' && milestonesData[idx]) {
+                // Cập nhật dữ liệu và giao diện
+                const milestone = milestonesData[idx];
+                const oldLane = document.getElementById(`month-lane-${milestone.month}`);
+                if (oldLane && oldLane !== lane) {
+                    // Xóa milestone khỏi lane cũ
+                    const milestoneDivs = oldLane.querySelectorAll('.milestone-item');
+                    milestoneDivs.forEach(div => {
+                        if (div.dataset.idx == idx) oldLane.removeChild(div);
+                    });
+                    // Thêm vào lane mới
+                    lane.appendChild(createMilestoneElement(milestone, idx));
+                    // Cập nhật dữ liệu
+                    milestone.month = i;
+                    saveMilestones();
+                }
+            }
+        });
+    }
+}
+
+// Helper: tạo milestone element (dùng lại khi drop)
+function createMilestoneElement(milestone, idx) {
+    const milestoneElement = document.createElement('div');
+    // Determine if milestone is in the past (completed)
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1; // JS months are 0-indexed
+    const currentYear = now.getFullYear();
+    // All milestones are for 2025, so compare month only
+    let bgColorClass = categoryColors[milestone.category] || categoryColors["Default"];
+    if (currentYear > 2025 || (currentYear === 2025 && milestone.month < currentMonth)) {
+        // Overwrite with gray for completed milestones
+        bgColorClass = "bg-gray-400 hover:bg-gray-500";
+    }
+    milestoneElement.className = `milestone-item p-1.5 sm:p-2 mb-1.5 rounded shadow text-xs cursor-pointer transition-all duration-150 ease-in-out transform hover:scale-105 text-white font-medium leading-tight overflow-hidden text-ellipsis whitespace-nowrap ${bgColorClass}`;
+    milestoneElement.textContent = milestone.shortName;
+    milestoneElement.dataset.fullName = milestone.fullName;
+    milestoneElement.dataset.category = milestone.category;
+    milestoneElement.dataset.owner = milestone.owner;
+    milestoneElement.dataset.idx = idx;
+    milestoneElement.setAttribute('draggable', 'true');
+    milestoneElement.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', idx);
+        setTimeout(() => {
+            milestoneElement.classList.add('opacity-40');
+        }, 0);
+    });
+    milestoneElement.addEventListener('dragend', (e) => {
+        milestoneElement.classList.remove('opacity-40');
+    });
+    milestoneElement.addEventListener('mouseenter', (event) => {
+        tooltipTitle.textContent = milestone.fullName;
+        tooltipCategory.textContent = `Hạng mục: ${milestone.category}`;
+        tooltipOwner.textContent = `Đơn vị: ${milestone.owner}`;
+        tooltip.classList.remove('hidden', 'opacity-0');
+        tooltip.classList.add('opacity-100');
+        const viewportPadding = 10;
+        let newTop = event.clientY + 15;
+        let newLeft = event.clientX + 15;
+        tooltip.style.top = `${newTop}px`;
+        tooltip.style.left = `${newLeft}px`;
+        const tooltipRect = tooltip.getBoundingClientRect();
+        if (newLeft + tooltipRect.width > window.innerWidth - viewportPadding) {
+            newLeft = event.clientX - tooltipRect.width - 15;
+        }
+        if (newTop + tooltipRect.height > window.innerHeight - viewportPadding) {
+            newTop = event.clientY - tooltipRect.height - 15;
+        }
+        if (newLeft < viewportPadding) newLeft = viewportPadding;
+        if (newTop < viewportPadding) newTop = viewportPadding;
+        tooltip.style.top = `${newTop}px`;
+        tooltip.style.left = `${newLeft}px`;
+    });
+    milestoneElement.addEventListener('mouseleave', () => {
+        tooltip.classList.add('hidden', 'opacity-0');
+        tooltip.classList.remove('opacity-100');
+    });
+    // Edit on single click
+    milestoneElement.addEventListener('click', () => {
+        openMilestoneModal('edit', idx);
+    });
+    return milestoneElement;
+}
+
+// Modal logic
+const milestoneModal = document.getElementById('milestoneModal');
+const addMilestoneBtn = document.getElementById('addMilestoneBtn');
+const closeModalBtn = document.getElementById('closeModalBtn');
+const cancelModalBtn = document.getElementById('cancelModalBtn');
+const milestoneForm = document.getElementById('milestoneForm');
+const modalTitle = document.getElementById('modalTitle');
+const shortNameInput = document.getElementById('shortNameInput');
+const fullNameInput = document.getElementById('fullNameInput');
+const categoryInput = document.getElementById('categoryInput');
+const ownerInput = document.getElementById('ownerInput');
+const monthInput = document.getElementById('monthInput');
+const editIdxInput = document.getElementById('editIdxInput');
+
+function openMilestoneModal(mode, idx) {
+    milestoneModal.classList.remove('hidden');
+    const deleteBtn = document.getElementById('deleteMilestoneBtn');
+    if (mode === 'edit') {
+        modalTitle.textContent = 'Chỉnh sửa mốc Golive';
+        const m = milestonesData[idx];
+        shortNameInput.value = m.shortName;
+        fullNameInput.value = m.fullName;
+        categoryInput.value = m.category;
+        ownerInput.value = m.owner;
+        monthInput.value = m.month;
+        editIdxInput.value = idx;
+        deleteBtn.classList.remove('hidden');
+        deleteBtn.onclick = function(e) {
+            e.preventDefault();
+            if (confirm('Bạn có chắc muốn xóa mốc này?')) {
+                milestonesData.splice(idx, 1);
+                saveMilestones();
+                renderMilestones();
+                closeMilestoneModal();
+            }
+        };
+    } else {
+        modalTitle.textContent = 'Thêm mốc Golive';
+        shortNameInput.value = '';
+        fullNameInput.value = '';
+        categoryInput.value = '';
+        ownerInput.value = '';
+        monthInput.value = '';
+        editIdxInput.value = '';
+        deleteBtn.classList.add('hidden');
+        deleteBtn.onclick = null;
+    }
+}
+function closeMilestoneModal() {
+    milestoneModal.classList.add('hidden');
+}
+// Đóng popup khi nhấn Escape
+document.addEventListener('keydown', function(e) {
+    if (!milestoneModal.classList.contains('hidden') && (e.key === 'Escape' || e.key === 'Esc')) {
+        closeMilestoneModal();
+    }
+});
+addMilestoneBtn.onclick = () => openMilestoneModal('add');
+closeModalBtn.onclick = closeMilestoneModal;
+cancelModalBtn.onclick = closeMilestoneModal;
+
+milestoneForm.onsubmit = (e) => {
+    e.preventDefault();
+    const newMilestone = {
+        shortName: shortNameInput.value.trim(),
+        fullName: fullNameInput.value.trim(),
+        category: categoryInput.value.trim(),
+        owner: ownerInput.value.trim(),
+        month: parseInt(monthInput.value, 10)
+    };
+    const idx = editIdxInput.value;
+    if (idx !== '') {
+        milestonesData[idx] = newMilestone;
+    } else {
+        milestonesData.push(newMilestone);
+    }
+    saveMilestones();
+    renderMilestones();
+    closeMilestoneModal();
+};
+
+// Init
+loadMilestones();
+populateMilestoneFilters();
+renderMilestones();
+
+// --- Filter/Search Event Listeners ---
+document.getElementById('filterCategory').addEventListener('change', function() {
+    filterCategory = this.value;
+    renderMilestones();
+});
+document.getElementById('filterOwner').addEventListener('change', function() {
+    filterOwner = this.value;
+    renderMilestones();
+});
+document.getElementById('searchName').addEventListener('input', function() {
+    searchName = this.value.trim().toLowerCase();
+    renderMilestones();
+});
+document.getElementById('clearFilterBtn').addEventListener('click', function() {
+    filterCategory = '';
+    filterOwner = '';
+    searchName = '';
+    document.getElementById('filterCategory').value = '';
+    document.getElementById('filterOwner').value = '';
+    document.getElementById('searchName').value = '';
+    renderMilestones();
+});
+        });
+    </script>
+</body>
+</html>

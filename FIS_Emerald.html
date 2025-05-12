@@ -194,6 +194,7 @@
             <button id="online-tab-btn" class="tab-button active">Online</button>
             <button id="eod-tab-btn" class="tab-button">EOD</button>
             <button id="key-changes-tab-btn" class="tab-button">Key Changes</button>
+            <button id="fis-issues-tab-btn" class="tab-button">Discussion Topics</button>
             <button id="table-tab-btn" class="tab-button">Table</button>
         </div>
 
@@ -281,7 +282,27 @@
             </div>
         </div>
 
+
+        <div id="fis-issues-view" class="tab-content">
+            <h3 class="text-xl font-semibold mb-4 text-gray-800">Discussion Topics with FIS</h3>
+            <ul class="list-disc pl-6 text-gray-700 space-y-3">
+                <li><strong>STF POST Performance:</strong> Review and address current performance bottlenecks in STF POST operations.</li>
+                <li><strong>AIX Benchmark/Best Practice:</strong> Discuss and align on AIX system benchmarks and best practices for optimal performance.</li>
+                <li><strong>Kafka Native Interface:</strong> Explore and evaluate the adoption of Kafka's native interface for improved integration and throughput.</li>
+                <li><strong>Continue Discussion from Last Emerald:</strong>
+                    <ul class="list-disc pl-6 mt-2 space-y-1">
+                        <li>Expert in area</li>
+                        <li>Client forum</li>
+                        <li>Core team and Client network</li>
+                        <li>Roadmap</li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+
         <div id="key-changes-view" class="tab-content">
+
+
              <h3 class="text-xl font-semibold mb-4 text-gray-800">Key Optimizations and Changes</h3>
 
              <div class="key-changes-chart-container">
@@ -292,34 +313,29 @@
              <div class="key-changes-pillar" data-pillar="application">
                  <h4 class="key-changes-pillar-title">Application Layer Optimizations</h4>
                  <div class="key-changes-details">
-                     <p class="mb-2"><strong>Code Refactoring and Algorithm Improvements:</strong> Tối ưu hóa các thuật toán xử lý giao dịch, giảm độ phức tạp của mã nguồn, loại bỏ các bottleneck trong luồng xử lý chính.</p>
-                     <p class="mb-2"><strong>Caching Strategies:</strong> Triển khai các lớp caching hiệu quả ở các tầng khác nhau (ví dụ: Redis, Memcached) để giảm tải cho database và tăng tốc độ truy xuất dữ liệu thường xuyên sử dụng.</p>
-                     <p class="mb-2"><strong>Asynchronous Processing:</strong> Chuyển đổi các tác vụ không yêu cầu phản hồi ngay lập tức (ví dụ: gửi thông báo, xử lý batch) sang mô hình bất đồng bộ sử dụng message queues (ví dụ: Kafka, RabbitMQ) để giải phóng tài nguyên xử lý online.</p>
-                     <p class="mb-2"><strong>Microservices Adoption/Refinement:</strong> Chia nhỏ các module lớn thành các dịch vụ nhỏ hơn, độc lập, dễ quản lý và mở rộng. Tối ưu hóa giao tiếp giữa các microservices.</p>
-                     <p><strong>API Performance Tuning:</strong> Tối ưu hóa hiệu suất các API public và internal, giảm thiểu thời gian phản hồi và tăng khả năng chịu tải thông qua profiling và tuning.</p>
+                     <p class="mb-2"><strong>Optimize data synchronization process from Core:</strong> 99% of data is synchronized from Core to MQ/Kafka within less than 1 second.</p>
+                     <p class="mb-2"><strong>Optimize accounting process:</strong> Remove redundant steps and logic, reducing response time to below 5ms.</p>
+                     <p class="mb-2"><strong>Optimize sequence generation in EOD accounting:</strong> Improve sequence generation to reduce DTX and TGL conflicts.</p>
+                     <p><strong>Follow lean core roadmap:</strong> Gradually decouple Payment, GL, and CIF modules from the core system.</p>
                  </div>
              </div>
 
              <div class="key-changes-pillar" data-pillar="database">
                  <h4 class="key-changes-pillar-title">Database Layer Optimizations</h4>
                  <div class="key-changes-details">
-                     <p class="mb-2"><strong>Indexing Strategy Review and Optimization:</strong> Phân tích và tạo/điều chỉnh các index hiệu quả cho các truy vấn thường xuyên, loại bỏ các index không cần thiết gây overhead.</p>
-                     <p class="mb-2"><strong>Query Optimization and Tuning:</strong> Phân tích các truy vấn chậm (slow queries), viết lại hoặc tối ưu hóa cấu trúc truy vấn để giảm thời gian thực thi.</p>
-                     <p class="mb-2"><strong>Database Partitioning:</strong> Chia nhỏ các bảng dữ liệu lớn thành các partition nhỏ hơn dựa trên tiêu chí phù hợp (ví dụ: thời gian, khu vực) để cải thiện hiệu suất truy vấn và quản lý dữ liệu.</p>
-                     <p class="mb-2"><strong>Connection Pooling Tuning:</strong> Tối ưu hóa cấu hình connection pool để quản lý hiệu quả số lượng kết nối đến database, tránh tình trạng quá tải hoặc thiếu hụt kết nối.</p>
-                     <p class="mb-2"><strong>Replication and Sharding Strategies:</strong> Triển khai hoặc tối ưu hóa các giải pháp replication (Master-Replica) và sharding để phân tán tải đọc/ghi và tăng khả năng mở rộng.</p>
-                     <p><strong>Database Server Configuration Tuning:</strong> Tinh chỉnh các tham số cấu hình của database server (ví dụ: bộ nhớ cache, buffer sizes) để phù hợp với workload của hệ thống.</p>
+                     <p class="mb-2"><strong>Optimize region for read/write of TGLMON process:</strong> Redesign and optimize the region to increase read/write speed for the Transaction Log Monitor (TGLMON) process, minimizing contention and maximizing throughput.</p>
+                     <p class="mb-2"><strong>Optimize epoch interval for more efficient data push to database files:</strong> Adjust the epoch interval appropriately to ensure data is written to database files efficiently, reducing latency and improving write performance.</p>
+                     <p class="mb-2"><strong>Optimize file system and volume group:</strong> Optimize the structure of the file system and volume group to ensure balanced I/O allocation, reduce bottlenecks, and increase storage scalability.</p>
+                     <p><strong>Redesign file system and region to optimize AIX file system cache:</strong> Redesign the file system and region to fully leverage the caching capabilities of the AIX operating system, increasing data access speed and reducing storage system load.</p>
                  </div>
              </div>
 
              <div class="key-changes-pillar" data-pillar="infra">
                  <h4 class="key-changes-pillar-title">Infrastructure Layer Optimizations</h4>
                  <div class="key-changes-details">
-                     <p class="mb-2"><strong>Hardware Upgrades:</strong> Nâng cấp CPU, RAM, ổ cứng (ưu tiên SSD tốc độ cao) cho các server ứng dụng và database.</p>
-                     <p class="mb-2"><strong>Network Optimization:</strong> Tối ưu hóa cấu hình mạng, băng thông, giảm độ trễ giữa các thành phần hệ thống (ứng dụng, database, cache servers).</p>
-                     <p class="mb-2"><strong>Load Balancing and Auto-scaling:</strong> Triển khai hoặc tối ưu hóa các giải pháp load balancing để phân phối tải đồng đều trên các server ứng dụng. Cấu hình auto-scaling để tự động điều chỉnh số lượng server dựa trên tải thực tế.</p>
-                     <p class="mb-2"><strong>Virtualization/Containerization Benefits:</strong> Tận dụng hiệu quả các nền tảng ảo hóa (VMware, KVM) hoặc container (Docker, Kubernetes) để quản lý tài nguyên linh hoạt và tối ưu hóa việc sử dụng phần cứng.</p>
-                     <p><strong>Monitoring and Alerting Improvements:</strong> Cài đặt và tinh chỉnh các công cụ giám sát hiệu suất (performance monitoring tools) cho toàn bộ stack (ứng dụng, database, server, network) và cấu hình các cảnh báo (alerts) sớm để phát hiện và xử lý sự cố kịp thời.</p>
+                     <p class="mb-2"><strong>Monitor and Alerting:</strong> Build comprehensive monitoring tools for the entire core system, covering transactions, database, online processes, batch, EOD, etc., to enable timely detection and resolution of issues.</p>
+                     <p class="mb-2"><strong>Extract MSGLOG realtime to Elasticsearch:</strong> Export MSGLOG in near real-time to Elasticsearch for fast and flexible log searching and analysis.</p>
+                     <p><strong>Continuous performance testing on lab environments:</strong> Regularly conduct performance testing in lab environments on both AIX and Linux platforms to ensure optimal system operation and cross-platform compatibility.</p>
                  </div>
              </div>
         </div>
@@ -366,8 +382,8 @@
         // Data from the provided image and additional capacity data
         const performanceData = [
             { name: 'Golive', tpsFin: 200, tpsNonFin: 10000, tpsFinCapacity: 500, tpsNonFinCapacity: 20000, eod: '6 hours', responseTime: 12, transactionVolume: 2.50 }, // Calculated
-            { name: 'Y1', tpsFin: 300, tpsNonFin: 8000, tpsFinCapacity: 1000, tpsNonFinCapacity: 20000, eod: '4 hours', responseTime: 7, transactionVolume: 3.38 }, // Calculated
-            { name: 'Y2', tpsFin: 400, tpsNonFin: 6000, tpsFinCapacity: 4000, tpsNonFinCapacity: 20000, eod: '< 3 hours', responseTime: 5, transactionVolume: 4.50 } // Provided
+            { name: 'Y1', tpsFin: 300, tpsNonFin: 8000, tpsFinCapacity: 1000, tpsNonFinCapacity: 20000, eod: '4 hours', responseTime: 7, transactionVolume: 3.70 }, // Updated
+            { name: 'Y2', tpsFin: 400, tpsNonFin: 6000, tpsFinCapacity: 4000, tpsNonFinCapacity: 20000, eod: '< 3 hours', responseTime: 5, transactionVolume: 5.20 } // Updated
         ];
 
          // Customer data (assuming Golive, Y1, Y2)
@@ -865,7 +881,7 @@
             data: {
                 labels: ['Application', 'Database', 'Infra'],
                 datasets: [{
-                    data: [40, 35, 25], // Example percentages (adjust as needed)
+                    data: [50, 40, 10], // Example percentages (adjust as needed)
                     backgroundColor: [
                         'rgba(255, 99, 132, 0.6)', // Red
                         'rgba(54, 162, 235, 0.6)', // Blue
@@ -1019,10 +1035,12 @@
         const onlineTabBtn = document.getElementById('online-tab-btn');
         const eodTabBtn = document.getElementById('eod-tab-btn');
         const keyChangesTabBtn = document.getElementById('key-changes-tab-btn'); // Get Key Changes tab button
+        const fisIssuesTabBtn = document.getElementById('fis-issues-tab-btn');
         const tableTabBtn = document.getElementById('table-tab-btn');
         const onlineView = document.getElementById('online-view');
         const eodView = document.getElementById('eod-view');
         const keyChangesView = document.getElementById('key-changes-view'); // Get Key Changes view
+        const fisIssuesView = document.getElementById('fis-issues-view');
         const tableView = document.getElementById('table-view');
 
         const exportPdfBtn = document.getElementById('export-pdf-btn');
@@ -1040,40 +1058,45 @@
             onlineTabBtn.classList.remove('active');
             eodTabBtn.classList.remove('active');
             keyChangesTabBtn.classList.remove('active'); // Reset Key Changes tab style
+            fisIssuesTabBtn.classList.remove('active');
             tableTabBtn.classList.remove('active');
 
             // Hide all views
             onlineView.style.display = 'none';
             eodView.style.display = 'none';
             keyChangesView.style.display = 'none'; // Hide Key Changes view
+            fisIssuesView.style.display = 'none';
             tableView.style.display = 'none';
 
             // Activate selected tab and show its view
             if (tab === 'online') {
                 onlineTabBtn.classList.add('active');
                 onlineView.style.display = 'block';
-                 exportPdfBtn.style.display = 'inline-block'; // Show export button
-                 renderActiveTabCharts('online'); // Render charts for online tab
+                exportPdfBtn.style.display = 'inline-block'; // Show export button
+                renderActiveTabCharts('online'); // Render charts for online tab
             } else if (tab === 'eod') {
                 eodTabBtn.classList.add('active');
                 eodView.style.display = 'block';
-                 exportPdfBtn.style.display = 'inline-block'; // Show export button
-                 renderActiveTabCharts('eod'); // Render charts for EOD tab
+                exportPdfBtn.style.display = 'inline-block'; // Show export button
+                renderActiveTabCharts('eod'); // Render charts for EOD tab
             } else if (tab === 'key-changes') { // Handle Key Changes tab
                 keyChangesTabBtn.classList.add('active');
                 keyChangesView.style.display = 'block';
-                 exportPdfBtn.style.display = 'inline-block'; // Show export button
-                 renderActiveTabCharts('key-changes'); // Render pie chart for Key Changes
-                 // Initially hide all details in Key Changes tab
-                 keyChangesView.querySelectorAll('.key-changes-details').forEach(detail => detail.style.display = 'none');
-
-            }
-            else if (tab === 'table') {
+                exportPdfBtn.style.display = 'inline-block'; // Show export button
+                renderActiveTabCharts('key-changes'); // Render pie chart for Key Changes
+                // Initially hide all details in Key Changes tab
+                keyChangesView.querySelectorAll('.key-changes-details').forEach(detail => detail.style.display = 'none');
+            } else if (tab === 'fis-issues') {
+                fisIssuesTabBtn.classList.add('active');
+                fisIssuesView.style.display = 'block';
+                exportPdfBtn.style.display = 'inline-block';
+                destroyCharts(); // No charts in FIS Issues view
+            } else if (tab === 'table') {
                 tableTabBtn.classList.add('active');
                 tableView.style.display = 'block';
-                 exportPdfBtn.style.display = 'inline-block'; // Show export button
-                 destroyCharts(); // No charts in table view
-                 renderTable(); // Render table
+                exportPdfBtn.style.display = 'inline-block'; // Show export button
+                destroyCharts(); // No charts in table view
+                renderTable(); // Render table
             }
         }
 
@@ -1081,6 +1104,7 @@
         onlineTabBtn.addEventListener('click', () => switchTab('online'));
         eodTabBtn.addEventListener('click', () => switchTab('eod'));
         keyChangesTabBtn.addEventListener('click', () => switchTab('key-changes')); // Add event listener for Key Changes tab
+        fisIssuesTabBtn.addEventListener('click', () => switchTab('fis-issues'));
         tableTabBtn.addEventListener('click', () => switchTab('table'));
 
 
